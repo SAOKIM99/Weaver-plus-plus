@@ -21,6 +21,7 @@ public:
     void removeAuthorizedCard(String uid);
     bool isCardAuthorized(String uid);
     void clearAllCards();
+    void setMasterCard(String uid);  // Set master card from main
     
     // Bike Control
     bool isBikeUnlocked();
@@ -35,6 +36,7 @@ private:
     bool bikeUnlocked;
     String lastCardUID;
     unsigned long lastCardTime;
+    String masterCardUID;  // Master card set from main
     
     void saveBikeState();
     void loadBikeState();

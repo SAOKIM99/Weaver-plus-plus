@@ -1,9 +1,16 @@
 #include "BikeRFIDManager.h"
 
+// Configuration constants
+#define CARD_DEBOUNCE_TIME_MS   1500    // Ignore same card within 1.5 seconds
+
+
+// Master card that always has access (fallback when preferences fail)
+
 BikeRFIDManager::BikeRFIDManager() : 
     mfrc522(SS_PIN, RST_PIN),
     bikeUnlocked(false),
-    lastCardTime(0) {
+    lastCardTime(0),
+    masterCardUID("") {  // Will be set from main
 }
 
 BikeRFIDManager::~BikeRFIDManager() {
@@ -21,6 +28,7 @@ void BikeRFIDManager::begin() {
     
     // Initialize preferences
     preferences.begin("bike-rfid", false);
+    Serial.println("DEBUG: Preferences initialized");
     
     // Load bike state
     loadBikeState();
@@ -34,8 +42,8 @@ void BikeRFIDManager::update() {
     if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) {
         String uid = getCardUID();
         
-        // Debounce - ignore same card within 2 seconds
-        if (uid != lastCardUID || (millis() - lastCardTime) > 2000) {
+        // Debounce - ignore same card within defined time
+        if (uid != lastCardUID || (millis() - lastCardTime) > CARD_DEBOUNCE_TIME_MS) {
             Serial.printf("RFID Card detected: %s\n", uid.c_str());
             processCard(uid);
             lastCardUID = uid;
@@ -49,6 +57,8 @@ void BikeRFIDManager::update() {
 }
 
 void BikeRFIDManager::processCard(String uid) {
+    Serial.printf("DEBUG: Processing card UID: %s\n", uid.c_str());
+    
     if (isCardAuthorized(uid)) {
         Serial.println("Authorized card detected!");
         toggleBikeLock();
@@ -59,12 +69,34 @@ void BikeRFIDManager::processCard(String uid) {
 
 bool BikeRFIDManager::isCardAuthorized(String uid) {
     String key = "card_" + uid;
-    return preferences.getBool(key.c_str(), false);
+    bool authorized = preferences.getBool(key.c_str(), false);
+    
+    // If not found in preferences, check against master card
+    if (!authorized && uid == masterCardUID && masterCardUID != "") {
+        authorized = true;
+        Serial.printf("DEBUG: Using master card: %s\n", uid.c_str());
+    }
+    
+    Serial.printf("DEBUG: Card %s: %s\n", 
+                  uid.c_str(), authorized ? "AUTHORIZED" : "NOT AUTHORIZED");
+    return authorized;
+}
+
+void BikeRFIDManager::setMasterCard(String uid) {
+    masterCardUID = uid;
+    Serial.printf("DEBUG: Master card set to: %s\n", uid.c_str());
 }
 
 void BikeRFIDManager::addAuthorizedCard(String uid) {
     String key = "card_" + uid;
-    preferences.putBool(key.c_str(), true);
+    Serial.printf("DEBUG: Adding card with key: %s\n", key.c_str());
+    
+    bool result = preferences.putBool(key.c_str(), true);
+    Serial.printf("DEBUG: putBool result: %s\n", result ? "SUCCESS" : "FAILED");
+    
+    // Verify immediately
+    bool verified = preferences.getBool(key.c_str(), false);
+    Serial.printf("DEBUG: Verification read: %s\n", verified ? "AUTHORIZED" : "NOT FOUND");
     
     // Also add to list for management
     uint8_t cardCount = preferences.getUChar("card_count", 0);
@@ -72,7 +104,7 @@ void BikeRFIDManager::addAuthorizedCard(String uid) {
     preferences.putString(listKey.c_str(), uid);
     preferences.putUChar("card_count", cardCount + 1);
     
-    Serial.printf("Card added: %s\n", uid.c_str());
+    Serial.printf("Card added: %s (Count: %d)\n", uid.c_str(), cardCount + 1);
 }
 
 void BikeRFIDManager::removeAuthorizedCard(String uid) {
@@ -83,7 +115,7 @@ void BikeRFIDManager::removeAuthorizedCard(String uid) {
 
 void BikeRFIDManager::clearAllCards() {
     preferences.clear();
-    Serial.println("All authorized cards cleared");
+    Serial.println("All authorized cards cleared - Please restart ESP32");
 }
 
 void BikeRFIDManager::toggleBikeLock() {

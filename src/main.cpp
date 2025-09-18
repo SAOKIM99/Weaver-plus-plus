@@ -42,8 +42,8 @@ struct SharedBikeData {
     BikeOperationState currentState;
 } sharedData;
 
-// Demo RFID card for testing
-const String DEMO_CARD_UID = "04:52:C6:EA:29:80:80"; // Replace with your card UID
+// Master RFID card for bike access
+const String MASTER_CARD_UID = "29:0E:72:43"; // Master card always authorized
 
 // =============================================================================
 // RTOS TASK FUNCTIONS
@@ -165,8 +165,7 @@ void systemTask(void *parameter) {
                     
                 case EVENT_EMERGENCY_STOP:
                     Serial.println("[SYSTEM] 🚨 EMERGENCY STOP - All systems halt");
-                    sensorManager.setMotorCurrent(0); // Stop motor immediately
-                    // Additional emergency procedures here
+                    // Emergency procedures - all critical systems disabled
                     break;
                     
                 default:
@@ -218,12 +217,6 @@ void displayTask(void *parameter) {
                          sharedData.bikeUnlocked ? "UNLOCKED" : "LOCKED",
                          sharedData.sensorData.keyOn ? "HIGH" : "LOW");
             
-            // Sensor Status  
-            Serial.printf("🚦 Brake: %s | Signals: L=%s R=%s\n",
-                         sharedData.sensorData.brakePressed ? "ON" : "OFF",
-                         sharedData.sensorData.leftSignal ? "ON" : "OFF",
-                         sharedData.sensorData.rightSignal ? "ON" : "OFF");
-            
             // Speed & Hall Status
             Serial.printf("🏁 Speed: %.1f km/h | Hall: %.1f Hz | Pulses: %lu\n",
                          sharedData.sensorData.bikeSpeed,
@@ -244,16 +237,6 @@ void displayTask(void *parameter) {
                 Serial.printf(" %.2fV %.1fA %d%% %.1f°C", 
                              sharedData.sensorData.bms2.voltage, sharedData.sensorData.bms2.current, 
                              sharedData.sensorData.bms2.soc, sharedData.sensorData.bms2.temperature);
-            }
-            Serial.println();
-            
-            // VESC Status
-            Serial.printf("⚡ VESC: %s", sharedData.sensorData.vesc.connected ? "OK" : "FAIL");
-            if (sharedData.sensorData.vesc.connected) {
-                Serial.printf(" %.0fRPM %.2fV %.2fA %.1f%% FET:%.1f°C Motor:%.1f°C", 
-                             sharedData.sensorData.vesc.motorRPM, sharedData.sensorData.vesc.inputVoltage, 
-                             sharedData.sensorData.vesc.motorCurrent, sharedData.sensorData.vesc.dutyCycle * 100,
-                             sharedData.sensorData.vesc.tempFET, sharedData.sensorData.vesc.tempMotor);
             }
             Serial.println();
             
@@ -302,8 +285,19 @@ void setup() {
     
     Serial.println("\n🔐 2. Initializing RFID System...");
     rfidManager.begin();
-    rfidManager.addAuthorizedCard(DEMO_CARD_UID);
-    Serial.printf("Demo card added: %s\n", DEMO_CARD_UID.c_str());
+    
+    // Set master card first
+    Serial.println("Setting master card...");
+    rfidManager.setMasterCard(MASTER_CARD_UID);
+    
+    // Clear all previous cards and add fresh
+    Serial.println("Clearing previous cards...");
+    rfidManager.clearAllCards();
+    delay(100); // Small delay for flash write
+    
+    Serial.println("Adding authorized card...");
+    rfidManager.addAuthorizedCard(MASTER_CARD_UID);
+    Serial.printf("Master card added: %s\n", MASTER_CARD_UID.c_str());
     
     Serial.println("\n📊 3. Initializing Sensor System...");
     sensorManager.begin();
@@ -341,25 +335,25 @@ void setup() {
         1                  // Core 1
     );
     
-    xTaskCreatePinnedToCore(
-        sensorTask,        // Task function
-        "SensorTask",      // Task name
-        4096,              // Stack size
-        NULL,              // Parameters
-        3,                 // Priority (Medium)
-        &sensorTaskHandle, // Task handle
-        1                  // Core 1
-    );
+    // xTaskCreatePinnedToCore(
+    //     sensorTask,        // Task function
+    //     "SensorTask",      // Task name
+    //     4096,              // Stack size
+    //     NULL,              // Parameters
+    //     3,                 // Priority (Medium)
+    //     &sensorTaskHandle, // Task handle
+    //     1                  // Core 1
+    // );
     
-    xTaskCreatePinnedToCore(
-        displayTask,       // Task function
-        "DisplayTask",     // Task name
-        3072,              // Stack size
-        NULL,              // Parameters
-        1,                 // Priority (Low)
-        &displayTaskHandle,// Task handle
-        0                  // Core 0
-    );
+    // xTaskCreatePinnedToCore(
+    //     displayTask,       // Task function
+    //     "DisplayTask",     // Task name
+    //     3072,              // Stack size
+    //     NULL,              // Parameters
+    //     1,                 // Priority (Low)
+    //     &displayTaskHandle,// Task handle
+    //     0                  // Core 0
+    // );
     
     Serial.println("\n✅ === RTOS SYSTEM READY ===");
     Serial.println("📋 Task Distribution:");

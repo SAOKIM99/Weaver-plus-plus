@@ -153,13 +153,6 @@ void BikeSensorManager::updateGPIOSensors() {
     bikeStatus.brakePressed = !digitalRead(BRAKE_PIN);
     bikeStatus.leftSignal = digitalRead(LEFT_PIN);
     bikeStatus.rightSignal = digitalRead(RIGHT_PIN);
-    
-    // Update analog readings
-    for (int i = 0; i < 8; i++) {
-        int analogPin = A0 + i; // ESP32 analog pins
-        int rawValue = analogRead(analogPin);
-        bikeStatus.analogReadings[i] = (rawValue / 4095.0) * 3.3; // Convert to voltage
-    }
 }
 
 void BikeSensorManager::updateHallSensors() {
