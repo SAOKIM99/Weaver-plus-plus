@@ -1,14 +1,17 @@
 #pragma once
 
 #include "Arduino.h"
+#include <SoftwareSerial.h>
 #include "../Bike_Hardware/BikeHardware.h"
-#include "../Jbd_Bms/BmsSync.h"
+#include "../JKBMSInterface/JKBMSInterface.h"
 #include "../Vesc_Uart/src/VescUart.h"
 
 class BikeSensorManager {
 private:
     BikeStatus bikeStatus;
-    BmsSync bmsSync;
+    JKBMSInterface bms1;
+    JKBMSInterface bms2;
+    SoftwareSerial vescSerial;
     VescUart vesc;
     
     // Timing

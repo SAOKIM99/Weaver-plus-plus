@@ -25,7 +25,10 @@ void IRAM_ATTR BikeSensorManager::hallSensorISR() {
 }
 
 BikeSensorManager::BikeSensorManager() : 
-    bmsSync(BMS_RX1, BMS_TX1, BMS_RX2, BMS_TX2),
+    bms1(&Serial2),
+    bms2(&Serial1),
+    vescSerial(VESC_RX, VESC_TX),
+    vesc(),
     lastSensorUpdate(0),
     bmsInitialized(false),
     vescInitialized(false) {
@@ -45,16 +48,17 @@ void BikeSensorManager::begin() {
     // KEY_PIN is managed by RFID manager, not set here
     pinMode(BRAKE_PIN, INPUT_PULLUP);
     pinMode(BRAKEL_PIN, OUTPUT);
-    pinMode(LEFT_PIN, OUTPUT);
-    pinMode(RIGHT_PIN, OUTPUT);
+    pinMode(LEFT_PIN, INPUT_PULLUP);   // INPUT: Read left signal state
+    pinMode(RIGHT_PIN, INPUT_PULLUP);  // INPUT: Read right signal state
     pinMode(HALL_PIN, INPUT_PULLUP);
     
     // Setup Hall sensor interrupt
     attachInterrupt(digitalPinToInterrupt(HALL_PIN), hallSensorISR, RISING);
     Serial.println("Hall sensor interrupt attached (RISING edge)");
     
-    // Initialize VESC communication
-    Serial2.begin(115200, SERIAL_8N1, VESC_RX, VESC_TX);
+    // Initialize BMS communication
+    Serial2.begin(115200, SERIAL_8N1, BMS_RX1, BMS_TX1);  // BMS1: RX=5, TX=17
+    Serial1.begin(115200, SERIAL_8N1, BMS_RX2, BMS_TX2);  // BMS2: RX=4, TX=16
     
     // Initialize BMS and VESC
     bmsInitialized = initializeBMS();
@@ -80,51 +84,60 @@ void BikeSensorManager::update() {
 }
 
 bool BikeSensorManager::initializeBMS() {
-    bmsSync.begin();
-    Serial.println("BMS initialized successfully");
+    bms1.begin(115200);
+    bms2.begin(115200);
+    Serial.println("JK-BMS1 Interface initialized successfully");
+    Serial.println("JK-BMS2 Interface initialized successfully");
     return true;
 }
 
 bool BikeSensorManager::initializeVESC() {
-    vesc.setSerialPort(&Serial2);
+    // Setup SoftwareSerial for VESC on pins 33(RX) and 27(TX)
+    vescSerial.begin(115200);
     
-    // Test communication
-    if (!vesc.getVescValues()) {
-        Serial.println("VESC communication failed");
-        return false;
+    // Set VESC to use SoftwareSerial
+    vesc.setSerialPort(&vescSerial);
+    
+    Serial.println("VESC initialized on SoftwareSerial pins RX=33, TX=27");
+    Serial.println("Serial0 (USB) remains free for debug messages");
+    
+    // Test communication (don't fail if first attempt fails, VESC might need time)
+    delay(100); // Give VESC time to initialize
+    if (vesc.getVescValues()) {
+        Serial.println("VESC communication test successful");
+        return true;
+    } else {
+        Serial.println("VESC communication test failed, but initialized");
+        return true;  // Still consider it initialized, communication might work later
     }
-    
-    Serial.println("VESC initialized successfully");
-    return true;
 }
 
 void BikeSensorManager::updateBMSData() {
     if (!bmsInitialized) return;
     
-    // Sync BMS data using BmsSync
-    bmsSync.sync();
+    // Update BMS1 data using JKBMSInterface
+    bms1.update();
     
-    // Get pack info for both BMS
-    bmsSync.getPack(1); // BMS1
-    
-    // Update bike status with BMS data
-    if (bmsSync.packInfo != nullptr && !bmsSync.packInfo->isEmpty()) {
-        bikeStatus.bms1.voltage = bmsSync.packInfo->voltage;
-        bikeStatus.bms1.current = bmsSync.packInfo->current;
-        bikeStatus.bms1.soc = bmsSync.packInfo->percent;
-        bikeStatus.bms1.temperature = bmsSync.packInfo->ntc[0]; // Use first NTC sensor
+    // Check if BMS1 data is valid and update bike status
+    if (bms1.isDataValid()) {
+        bikeStatus.bms1.voltage = bms1.getVoltage();
+        bikeStatus.bms1.current = bms1.getCurrent();
+        bikeStatus.bms1.soc = bms1.getSOC();
+        bikeStatus.bms1.temperature = bms1.getBatteryTemp();
         bikeStatus.bms1.connected = true;
     } else {
         bikeStatus.bms1.connected = false;
     }
     
-    // Get pack info for BMS2
-    bmsSync.getPack(2);
-    if (bmsSync.packInfo != nullptr && !bmsSync.packInfo->isEmpty()) {
-        bikeStatus.bms2.voltage = bmsSync.packInfo->voltage;
-        bikeStatus.bms2.current = bmsSync.packInfo->current;
-        bikeStatus.bms2.soc = bmsSync.packInfo->percent;
-        bikeStatus.bms2.temperature = bmsSync.packInfo->ntc[0]; // Use first NTC sensor
+    // Update BMS2 data using JKBMSInterface
+    bms2.update();
+    
+    // Check if BMS2 data is valid and update bike status
+    if (bms2.isDataValid()) {
+        bikeStatus.bms2.voltage = bms2.getVoltage();
+        bikeStatus.bms2.current = bms2.getCurrent();
+        bikeStatus.bms2.soc = bms2.getSOC();
+        bikeStatus.bms2.temperature = bms2.getBatteryTemp();
         bikeStatus.bms2.connected = true;
     } else {
         bikeStatus.bms2.connected = false;

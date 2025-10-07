@@ -335,25 +335,25 @@ void setup() {
         1                  // Core 1
     );
     
-    // xTaskCreatePinnedToCore(
-    //     sensorTask,        // Task function
-    //     "SensorTask",      // Task name
-    //     4096,              // Stack size
-    //     NULL,              // Parameters
-    //     3,                 // Priority (Medium)
-    //     &sensorTaskHandle, // Task handle
-    //     1                  // Core 1
-    // );
+    xTaskCreatePinnedToCore(
+        sensorTask,        // Task function
+        "SensorTask",      // Task name
+        4096,              // Stack size
+        NULL,              // Parameters
+        3,                 // Priority (Medium)
+        &sensorTaskHandle, // Task handle
+        1                  // Core 1
+    );
     
-    // xTaskCreatePinnedToCore(
-    //     displayTask,       // Task function
-    //     "DisplayTask",     // Task name
-    //     3072,              // Stack size
-    //     NULL,              // Parameters
-    //     1,                 // Priority (Low)
-    //     &displayTaskHandle,// Task handle
-    //     0                  // Core 0
-    // );
+    xTaskCreatePinnedToCore(
+        displayTask,       // Task function
+        "DisplayTask",     // Task name
+        3072,              // Stack size
+        NULL,              // Parameters
+        1,                 // Priority (Low)
+        &displayTaskHandle,// Task handle
+        0                  // Core 0
+    );
     
     Serial.println("\n✅ === RTOS SYSTEM READY ===");
     Serial.println("📋 Task Distribution:");

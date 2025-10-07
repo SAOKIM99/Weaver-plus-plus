@@ -4,12 +4,12 @@
 #include <Arduino.h>
 
 // GPIO Pin Definitions
-#define KEY_PIN                         13  // High = bike ON
-#define BRAKE_PIN                       14  // Low = brake pressed  
-#define BRAKEL_PIN                      12  // High = brake light ON
-#define HALL_PIN                        34  // Motor speed pulse
-#define LEFT_PIN                        35  // High = left signal ON
-#define RIGHT_PIN                       32  // High = right signal ON
+#define KEY_PIN                         13  // OUTPUT: High = bike ON
+#define BRAKE_PIN                       14  // INPUT: Low = brake pressed  
+#define BRAKEL_PIN                      12  // OUTPUT: High = brake light ON
+#define HALL_PIN                        34  // INPUT: Motor speed pulse
+#define LEFT_PIN                        35  // INPUT: High = left signal detected
+#define RIGHT_PIN                       32  // INPUT: High = right signal detected
 
 // Boot button for manual BLE authentication
 #define MANUAL_AUTHENTICATION_PIN       0
@@ -18,7 +18,7 @@
 #define RST_PIN                         22     
 #define SS_PIN                          21
 
-// BMS UART pins
+// BMS UART pins (JK-BMS Interface)
 #define BMS_RX1                         5
 #define BMS_TX1                         17
 #define BMS_RX2                         4
