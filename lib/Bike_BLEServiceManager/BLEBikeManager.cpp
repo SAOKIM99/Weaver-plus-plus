@@ -1,4 +1,5 @@
 #include "BLEBikeManager.h"
+#include "BikeRFIDManager.h"
 
 BLEBikeManager::BLEBikeManager() : 
     pServer(nullptr), 
@@ -11,7 +12,8 @@ BLEBikeManager::BLEBikeManager() :
     pairingInProgress(false),
     bootButtonPressed(false),
     lastBootButtonCheck(0),
-    pairingStartTime(0) {
+    pairingStartTime(0),
+    rfidManager(nullptr) {
 }
 
 BLEBikeManager::~BLEBikeManager() {
@@ -24,7 +26,7 @@ void BLEBikeManager::begin() {
     Serial.println("=== BLE Bike Manager Initialization ===");
     
     // Initialize boot button
-    pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
+    pinMode(MANUAL_AUTHENTICATION_PIN, INPUT_PULLUP);
     
     // Initialize preferences for storing bonded devices
     preferences.begin("bike-bonds", false);
@@ -34,6 +36,10 @@ void BLEBikeManager::begin() {
     Serial.print("Found ");
     Serial.print(bondCount);
     Serial.println(" bonded devices");
+    
+    if (bondCount > 0) {
+        printBondedDevices();
+    }
     
     // Initialize NimBLE
     NimBLEDevice::init("+ SAO KIM +");
@@ -50,10 +56,16 @@ void BLEBikeManager::begin() {
     Serial.println("BLE Bike Manager initialized successfully");
     Serial.println("=== Security Instructions ===");
     Serial.println("1. Device discoverable as '+ SAO KIM +'");
-    Serial.println("2. FIRST TIME: Press BOOT button to accept connection");
+    Serial.println("2. FIRST TIME: Press BOOT button OR scan RFID card to accept connection");
     Serial.println("3. SUBSEQUENT: Auto-accepted for bonded devices");
-    Serial.println("4. Hold BOOT 5+ seconds to clear all bonds");
+    Serial.println("4. BONDED DEVICES: Maximum 5 devices (FIFO replacement when full)");
+    Serial.println("5. Hold BOOT 5+ seconds to clear all bonds");
     Serial.println("====================================");
+}
+
+void BLEBikeManager::setRFIDManager(BikeRFIDManager* rfid) {
+    rfidManager = rfid;
+    Serial.println("RFID Manager linked to BLE Manager");
 }
 
 void BLEBikeManager::update() {
@@ -183,7 +195,7 @@ void BLEBikeManager::onConnect(BLEServer* pServer, ble_gap_conn_desc* param) {
         pairingInProgress = true;
         pairingStartTime = millis();
         
-        Serial.println("PRESS AND HOLD BOOT BUTTON NOW to accept connection!");
+        Serial.println("PRESS AND HOLD BOOT BUTTON OR SCAN RFID CARD to accept connection!");
         Serial.println("You have 30 seconds...");
         
         // Đợi người dùng nhấn nút BOOT trong 30 giây
@@ -192,11 +204,19 @@ void BLEBikeManager::onConnect(BLEServer* pServer, ble_gap_conn_desc* param) {
         
         while (millis() - startTime < PAIRING_TIMEOUT_MS) {
             // Kiểm tra nút BOOT
-            if (digitalRead(BOOT_BUTTON_PIN) == LOW) {
+            if (digitalRead(MANUAL_AUTHENTICATION_PIN) == LOW) {
                 Serial.println("BOOT button pressed - CONNECTION ACCEPTED!");
                 accepted = true;
                 break;
             }
+            
+            // Kiểm tra RFID card
+            if (isRFIDAuthenticated()) {
+                Serial.println("RFID card authenticated - CONNECTION ACCEPTED!");
+                accepted = true;
+                break;
+            }
+            
             delay(100);
         }
         
@@ -375,7 +395,16 @@ void BLEBikeManager::setConnectionPriority(bool isHigh) {
 
 // Security Functions Implementation
 bool BLEBikeManager::isBootButtonPressed() {
-    return digitalRead(BOOT_BUTTON_PIN) == LOW;
+    return digitalRead(MANUAL_AUTHENTICATION_PIN) == LOW;
+}
+
+bool BLEBikeManager::isRFIDAuthenticated() {
+    if (rfidManager == nullptr) {
+        return false;
+    }
+    
+    // Check if authorized RFID card is present
+    return rfidManager->authenticateCard();
 }
 
 void BLEBikeManager::updateBootButton() {
@@ -416,6 +445,7 @@ void BLEBikeManager::saveBondedDevice(BLEAddress address) {
     uint8_t bondCount = preferences.getUChar("bond_count", 0);
     
     if (bondCount < MAX_BONDED_DEVICES) {
+        // Add new device normally
         String key = "bond_" + String(bondCount);
         preferences.putString(key.c_str(), address.toString().c_str());
         preferences.putUChar("bond_count", bondCount + 1);
@@ -425,8 +455,35 @@ void BLEBikeManager::saveBondedDevice(BLEAddress address) {
         Serial.print("Total bonded devices: ");
         Serial.println(bondCount + 1);
     } else {
-        Serial.println("Maximum bonded devices reached!");
+        // FIFO replacement: Remove oldest (bond_0) and shift all up
+        Serial.println("Maximum bonded devices reached - Replacing oldest device");
+        
+        // Get oldest device that will be removed
+        String oldestKey = "bond_0";
+        String oldestDevice = preferences.getString(oldestKey.c_str(), "");
+        Serial.printf("Removing oldest bonded device: %s\n", oldestDevice.c_str());
+        
+        // Shift all devices up (bond_1 -> bond_0, bond_2 -> bond_1, etc.)
+        for (uint8_t i = 0; i < MAX_BONDED_DEVICES - 1; i++) {
+            String currentKey = "bond_" + String(i + 1);
+            String targetKey = "bond_" + String(i);
+            String deviceAddress = preferences.getString(currentKey.c_str(), "");
+            
+            if (deviceAddress != "") {
+                preferences.putString(targetKey.c_str(), deviceAddress.c_str());
+            }
+        }
+        
+        // Add new device at the end
+        String newKey = "bond_" + String(MAX_BONDED_DEVICES - 1);
+        preferences.putString(newKey.c_str(), address.toString().c_str());
+        
+        Serial.printf("New device bonded (replaced oldest): %s\n", address.toString().c_str());
+        Serial.printf("Total bonded devices: %d (maintained)\n", MAX_BONDED_DEVICES);
     }
+    
+    // Show updated bonded devices list
+    printBondedDevices();
 }
 
 bool BLEBikeManager::isDeviceBonded(BLEAddress address) {
@@ -442,6 +499,27 @@ bool BLEBikeManager::isDeviceBonded(BLEAddress address) {
     }
     
     return false;
+}
+
+void BLEBikeManager::printBondedDevices() {
+    uint8_t bondCount = preferences.getUChar("bond_count", 0);
+    Serial.println("=== BONDED DEVICES LIST ===");
+    
+    if (bondCount == 0) {
+        Serial.println("No bonded devices");
+    } else {
+        for (uint8_t i = 0; i < bondCount; i++) {
+            String key = "bond_" + String(i);
+            String deviceAddress = preferences.getString(key.c_str(), "");
+            
+            if (deviceAddress != "") {
+                Serial.printf("%d. %s %s\n", i + 1, deviceAddress.c_str(), 
+                             (i == 0) ? "(oldest)" : (i == bondCount - 1) ? "(newest)" : "");
+            }
+        }
+    }
+    Serial.printf("Total: %d/%d devices\n", bondCount, MAX_BONDED_DEVICES);
+    Serial.println("==========================");
 }
 
 void BLEBikeManager::clearBondedDevicesInternal() {

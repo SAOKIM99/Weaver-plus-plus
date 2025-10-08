@@ -109,7 +109,7 @@ void BikeDisplayUI::createSpeedometer() {
   // Style cho background arc (để hiển thị track)
   lv_obj_set_style_arc_color(ui_speed_arc, lv_color_hex(0x1A1E23), LV_PART_MAIN);
   lv_obj_set_style_arc_width(ui_speed_arc, 16, LV_PART_MAIN);
-  lv_obj_set_style_arc_opa(ui_speed_arc, 0, LV_PART_MAIN);
+  lv_obj_set_style_arc_opa(ui_speed_arc, 255, LV_PART_MAIN);
   
   // Style cho indicator arc (phần active)
   lv_obj_set_style_arc_color(ui_speed_arc, lv_color_hex(0x4ECDC4), LV_PART_INDICATOR);
@@ -162,7 +162,7 @@ void BikeDisplayUI::createCurrentDisplay() {
   // Style cho background arc (để hiển thị track)
   lv_obj_set_style_arc_color(ui_current_arc, lv_color_hex(0x1A1E23), LV_PART_MAIN);
   lv_obj_set_style_arc_width(ui_current_arc, 16, LV_PART_MAIN);
-  lv_obj_set_style_arc_opa(ui_current_arc, 0, LV_PART_MAIN);
+  lv_obj_set_style_arc_opa(ui_current_arc, 255, LV_PART_MAIN);
   
   // Style cho indicator arc (phần active)
   lv_obj_set_style_arc_color(ui_current_arc, lv_color_hex(0x4ECDC4), LV_PART_INDICATOR);
@@ -582,9 +582,6 @@ void BikeDisplayUI::updateBattery1(float volt, int percent, uint16_t diffVoltMv,
     lv_label_set_text(ui_bat1_diff_value, buffer);
     lv_color_t color = (diffVoltMv > 500) ? UI_COLOR_DANGER : UI_COLOR_SUCCESS;  // 500mV threshold
     lv_obj_set_style_text_color(ui_bat1_diff_value, color, LV_PART_MAIN | LV_STATE_DEFAULT);
-    
-    Serial.printf("🖥️  [UI] BAT1 Display: %dmV → '%s' (Color: %s)\n", 
-                  diffVoltMv, buffer, (diffVoltMv > 500) ? "RED" : "GREEN");
   }
   
   if (ui_bat1_temp_value) {
@@ -624,9 +621,6 @@ void BikeDisplayUI::updateBattery2(float volt, int percent, uint16_t diffVoltMv,
     lv_label_set_text(ui_bat2_diff_value, buffer);
     lv_color_t color = (diffVoltMv > 500) ? UI_COLOR_DANGER : UI_COLOR_SUCCESS;  // 500mV threshold
     lv_obj_set_style_text_color(ui_bat2_diff_value, color, LV_PART_MAIN | LV_STATE_DEFAULT);
-    
-    Serial.printf("🖥️  [UI] BAT2 Display: %dmV → '%s' (Color: %s)\n", 
-                  diffVoltMv, buffer, (diffVoltMv > 500) ? "RED" : "GREEN");
   }
   
   if (ui_bat2_temp_value) {
@@ -658,9 +652,11 @@ void BikeDisplayUI::updateBluetooth(bool connected) {
   if (!ui_bluetooth_icon) return;
   
   if (connected) {
-    lv_obj_set_style_text_color(ui_bluetooth_icon, UI_COLOR_SUCCESS, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(ui_bluetooth_icon, UI_COLOR_ACCENT, LV_PART_MAIN | LV_STATE_DEFAULT);
+    Serial.println("🔵 [UI] Bluetooth icon: BLUE (connected)");
   } else {
     lv_obj_set_style_text_color(ui_bluetooth_icon, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);
+    Serial.println("⚫ [UI] Bluetooth icon: HIDDEN (disconnected)");
   }
 }
 

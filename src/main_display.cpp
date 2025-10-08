@@ -60,6 +60,8 @@ void onCANMessage(uint32_t id, uint8_t* data, uint8_t length) {
                             bike.bluetoothConnected ? "ON" : "OFF",
                             bike.turnLeftActive ? "ON" : "OFF",
                             bike.turnRightActive ? "ON" : "OFF");
+                Serial.printf("📱 [CAN-RX] Bluetooth Status: bike.bluetoothConnected = %s\n", 
+                            bike.bluetoothConnected ? "true" : "false");
                 break;
                 
             case MSG_ID_BMS_DATA + 1: // BMS1
@@ -161,23 +163,23 @@ void setup() {
   
   // Initialize bike data with default values
   bike.speed = 0;
-  bike.current = 2.5;
-  bike.batteryPercent = 85;
-  bike.ecuTemp = 38;
-  bike.motorTemp = 45;
-  bike.motorCurrent = 4.3;
-  bike.battery1Volt = 48.2;
-  bike.battery1Percent = 85;
-  bike.battery1DiffVolt = 200; // 200mV
-  bike.battery1Temp = 28;
-  bike.battery1Current = 2.5;
-  bike.battery2Volt = 47.8;
-  bike.battery2Percent = 82;
-  bike.battery2DiffVolt = 100; // 100mV
-  bike.battery2Temp = 31;
-  bike.battery2Current = 1.8;
-  bike.odometer = 1234.5;
-  bike.bluetoothConnected = true;  // Khởi tạo Bluetooth connected
+  bike.current = 0;
+  bike.batteryPercent = 0;
+  bike.ecuTemp = 0;
+  bike.motorTemp = 0;
+  bike.motorCurrent = 0;
+  bike.battery1Volt = 0;
+  bike.battery1Percent = 0;
+  bike.battery1DiffVolt = 0; // 200mV
+  bike.battery1Temp = 0;
+  bike.battery1Current = 0;
+  bike.battery2Volt = 0;
+  bike.battery2Percent = 0;
+  bike.battery2DiffVolt = 0; // 100mV
+  bike.battery2Temp = 0;
+  bike.battery2Current = 0;
+  bike.odometer = 0;
+  bike.bluetoothConnected = false;  // Khởi tạo Bluetooth disconnected
   bike.turnLeftActive = false;     // Khởi tạo turn indicators tắt
   bike.turnRightActive = false;
   

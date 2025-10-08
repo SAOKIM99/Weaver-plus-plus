@@ -49,12 +49,18 @@ void bleTask(void *parameter) {
         // Update shared BLE connection state
         if (xSemaphoreTake(bikeDataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
             bool wasConnected = sharedData.bleConnected;
-            sharedData.bleConnected = bleManager.isConnected();
+            bool currentlyConnected = bleManager.isConnected();
+            sharedData.bleConnected = currentlyConnected;
+            
+
             
             // Send event if connection state changed
             if (wasConnected != sharedData.bleConnected) {
                 SystemEvent event = sharedData.bleConnected ? EVENT_BLE_CONNECTED : EVENT_BLE_DISCONNECTED;
                 xQueueSend(systemEventQueue, &event, 0);
+                Serial.printf("[BLE_TASK] Connection change: %s → %s\n", 
+                              wasConnected ? "Connected" : "Disconnected",
+                              sharedData.bleConnected ? "Connected" : "Disconnected");
             }
             
             xSemaphoreGive(bikeDataMutex);
@@ -298,6 +304,9 @@ void setup() {
     
     Serial.println("\n🔐 2. Initializing RFID System...");
     rfidManager.begin();
+    
+    // Link RFID Manager to BLE Manager for authentication
+    bleManager.setRFIDManager(&rfidManager);
     
     // Set master card first
     Serial.println("Setting master card...");

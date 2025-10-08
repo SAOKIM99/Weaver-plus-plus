@@ -22,10 +22,10 @@
 #define SPEED_ARC_HEIGHT    250
 #define SPEED_ARC_X         (SCREEN_CENTER_X - SPEED_ARC_WIDTH/2)   // Centered horizontally
 #define SPEED_ARC_Y         (SCREEN_CENTER_Y - SPEED_ARC_HEIGHT/2 + 30)  // Centered with offset
-#define SPEED_ARC_RANGE     180
+#define SPEED_ARC_RANGE     170
 #define SPEED_ARC_ROTATION  135
 #define SPEED_BG_START      0
-#define SPEED_BG_END        180
+#define SPEED_BG_END        170
 
 // Current Arc Configuration  
 #define CURRENT_ARC_WIDTH     250

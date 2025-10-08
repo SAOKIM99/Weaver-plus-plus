@@ -112,8 +112,24 @@ bool BikeCANManager::sendBMSData(const BMSData& bms, uint8_t bmsId) {
     // SOC percentage (1 byte)
     CAN.write(bms.soc);
     
-    // Temperature (1 byte) - add offset for negative temps
-    CAN.write((uint8_t)(bms.temperature + 50));
+    // Calculate maximum temperature from all available sensors
+    float maxTemp = bms.temperature;  // Battery temperature (primary)
+    
+    // Check power temperature (MOSFET temperature)
+    if (bms.powerTemp > -50.0f && bms.powerTemp < 150.0f) {  // Valid range check
+        maxTemp = max(maxTemp, bms.powerTemp);
+    }
+    
+    // Check box temperature (BMS controller temperature)  
+    if (bms.boxTemp > -50.0f && bms.boxTemp < 150.0f) {  // Valid range check
+        maxTemp = max(maxTemp, bms.boxTemp);
+    }
+    
+    // Temperature (1 byte) - send maximum temperature with offset
+    CAN.write((uint8_t)(maxTemp + 50));
+    
+    // Debug: Log temperature being sent via CAN (simplified)
+    // Serial.printf("📤 [CAN-BMS%d] Temp: %.1f°C\n", bmsId, maxTemp);
     
     // Status flags (2 bytes)
     uint8_t status1 = 0;
@@ -241,9 +257,21 @@ bool BikeCANManager::sendBatteryExtended(const BMSData& bms1, const BMSData& bms
     CAN.write(bms1DeltaByte); 
     CAN.write(bms2DeltaByte);
     
-    // Battery temperatures (1 byte each + 40 offset)
-    CAN.write((uint8_t)(bms1.temperature + 40));
-    CAN.write((uint8_t)(bms2.temperature + 40));
+    // Calculate maximum temperatures for each BMS
+    float maxTemp1 = bms1.temperature;
+    if (bms1.powerTemp > -50.0f && bms1.powerTemp < 150.0f) maxTemp1 = max(maxTemp1, bms1.powerTemp);
+    if (bms1.boxTemp > -50.0f && bms1.boxTemp < 150.0f) maxTemp1 = max(maxTemp1, bms1.boxTemp);
+    
+    float maxTemp2 = bms2.temperature;
+    if (bms2.powerTemp > -50.0f && bms2.powerTemp < 150.0f) maxTemp2 = max(maxTemp2, bms2.powerTemp);
+    if (bms2.boxTemp > -50.0f && bms2.boxTemp < 150.0f) maxTemp2 = max(maxTemp2, bms2.boxTemp);
+    
+    // Battery maximum temperatures (1 byte each + 40 offset)
+    CAN.write((uint8_t)(maxTemp1 + 40));
+    CAN.write((uint8_t)(maxTemp2 + 40));
+    
+    // Debug: Log extended temperatures (simplified)
+    // Serial.printf("📤 [CAN-EXT] BMS1: %.1f°C, BMS2: %.1f°C\n", maxTemp1, maxTemp2);
     
     // Power calculations (2 bytes)
     int16_t motorPower = (int16_t)((bms1.voltage + bms2.voltage) * (bms1.current + bms2.current) / 2);
@@ -325,12 +353,18 @@ bool BikeCANManager::sendTimeData(int time) {
 // =============================================================================
 
 bool BikeCANManager::parseBikeStatus(uint8_t* data, uint8_t length, BikeStatus& status, bool& bikeUnlocked, bool& bleConnected) {
-    if (!data || length < 8) return false;
+    if (!data || length < 7) return false;
+    
+    // Debug raw data (disabled)
+    // Serial.printf("🔍 [parseBikeStatus] Raw: [%d][%d][%d][%d][%d]\n", data[0], data[1], data[2], data[3], data[4]);
     
     status.operationState = (BikeOperationState)data[0];
     bikeUnlocked = (data[1] == 1);
     bleConnected = (data[2] == 1);
     status.bikeSpeed = (float)data[3];
+    
+    // Debug parsed data (disabled)
+    // Serial.printf("🔍 [parseBikeStatus] BLE: %s, Speed: %.0f\n", bleConnected ? "ON" : "OFF", status.bikeSpeed);
     
     // Parse status flags
     uint8_t flags = data[4];
@@ -490,6 +524,9 @@ bool BikeCANManager::parseCANMessage(uint32_t id, uint8_t* data, uint8_t length,
                 displayData.battery1Temp = (int)tempBMS.temperature;
                 displayData.battery1Current = tempBMS.current;
                 displayData.isCharging = tempBMS.isCharging;
+                
+                // Debug: Log BMS1 temperature (simplified)
+                // Serial.printf("🌡️ [CAN-BMS1] %.1f°C\n", tempBMS.temperature);
             }
             break;
         }
@@ -503,6 +540,9 @@ bool BikeCANManager::parseCANMessage(uint32_t id, uint8_t* data, uint8_t length,
                 displayData.battery2Temp = (int)tempBMS.temperature;
                 displayData.battery2Current = tempBMS.current;
                 if (tempBMS.isCharging) displayData.isCharging = true;
+                
+                // Debug: Log BMS2 temperature (simplified)
+                // Serial.printf("🌡️ [CAN-BMS2] %.1f°C\n", tempBMS.temperature);
             }
             break;
         }
@@ -514,6 +554,9 @@ bool BikeCANManager::parseCANMessage(uint32_t id, uint8_t* data, uint8_t length,
                 displayData.motorTemp = (int)tempVESC.tempMotor;
                 displayData.ecuTemp = (int)tempVESC.tempFET;
                 displayData.motorCurrent = tempVESC.motorCurrent;
+                
+                // Debug: Log VESC temperatures (simplified)
+                // Serial.printf("🌡️ [CAN-VESC] Motor: %.1f°C, FET: %.1f°C\n", tempVESC.tempMotor, tempVESC.tempFET);
             }
             break;
         }
@@ -526,6 +569,9 @@ bool BikeCANManager::parseCANMessage(uint32_t id, uint8_t* data, uint8_t length,
                 displayData.battery1DiffVolt = tempBMS1.cellVoltageDelta;
                 displayData.battery2DiffVolt = tempBMS2.cellVoltageDelta;
                 displayData.motorPower = motorPower;
+                
+                // Debug: Log extended temperatures (simplified)
+                // Serial.printf("🌡️ [CAN-EXT] BMS1: %.1f°C, BMS2: %.1f°C\n", tempBMS1.temperature, tempBMS2.temperature);
             } else {
                 Serial.println("❌ [parseCANMessage] Failed to parse MSG_ID_BATTERY_EXT");
             }

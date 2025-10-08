@@ -132,6 +132,10 @@ void BikeSensorManager::updateBMSData() {
         bikeStatus.bms1.powerTemp = bms1.getPowerTemp();
         bikeStatus.bms1.boxTemp = bms1.getBoxTemp();
         
+        // Debug: Print BMS1 temperatures (disabled for cleaner output)
+        // Serial.printf("🌡️ [BMS1] Battery: %.1f°C, Power: %.1f°C, Box: %.1f°C\n", 
+        //              bikeStatus.bms1.temperature, bikeStatus.bms1.powerTemp, bikeStatus.bms1.boxTemp);
+        
         // Cell voltage info
         bikeStatus.bms1.numCells = bms1.getNumCells();
         bikeStatus.bms1.lowestCellVolt = bms1.getLowestCellVoltage();
@@ -169,6 +173,10 @@ void BikeSensorManager::updateBMSData() {
         bikeStatus.bms2.cycles = bms2.getCycles();
         bikeStatus.bms2.powerTemp = bms2.getPowerTemp();
         bikeStatus.bms2.boxTemp = bms2.getBoxTemp();
+        
+        // Debug: Print BMS2 temperatures (disabled for cleaner output)
+        // Serial.printf("🌡️ [BMS2] Battery: %.1f°C, Power: %.1f°C, Box: %.1f°C\n", 
+        //              bikeStatus.bms2.temperature, bikeStatus.bms2.powerTemp, bikeStatus.bms2.boxTemp);
         
         // Cell voltage info
         bikeStatus.bms2.numCells = bms2.getNumCells();

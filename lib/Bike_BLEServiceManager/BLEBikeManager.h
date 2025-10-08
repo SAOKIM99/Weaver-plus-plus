@@ -6,9 +6,12 @@
 #include <Preferences.h>
 #include "BLEBikeInfo.h"
 #include "BikeData.h"
+#include "BikeMainHardware.h"
 
-// Boot button and security definitions
-#define BOOT_BUTTON_PIN 0
+// Forward declaration
+class BikeRFIDManager;
+
+// Security definitions
 #define PAIRING_TIMEOUT_MS 30000  // 30 seconds timeout for pairing
 #define MAX_BONDED_DEVICES 5      // Maximum number of bonded devices
 
@@ -32,6 +35,7 @@ public:
     
     // Initialization
     void begin();
+    void setRFIDManager(BikeRFIDManager* rfid);  // Set RFID manager reference
     void update();
     
     // BLE Server Callbacks (kế thừa từ BLESecurityManager)
@@ -52,6 +56,7 @@ public:
     bool isPairingInProgress();
     void clearBondedDevices();
     uint8_t getBondedDeviceCount();
+    void printBondedDevices();  // Debug: Show all bonded devices
     
     // Bike Information
     const char* getBikeName();
@@ -85,6 +90,9 @@ private:
     unsigned long lastBootButtonCheck;
     unsigned long pairingStartTime;
     
+    // RFID integration
+    BikeRFIDManager* rfidManager;
+    
     // Internal functions
     void setupServer();
     void setupServices();
@@ -94,6 +102,7 @@ private:
     
     // Security functions
     bool isBootButtonPressed();
+    bool isRFIDAuthenticated();  // Check RFID authentication
     void updateBootButton();
     void saveBondedDevice(BLEAddress address);
     bool isDeviceBonded(BLEAddress address);

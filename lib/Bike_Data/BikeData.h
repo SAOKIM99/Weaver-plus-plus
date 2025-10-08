@@ -98,42 +98,42 @@ struct SharedBikeData {
 struct BikeDataDisplay {
   float speed = 0;
   // Battery data
-  int batteryPercent = 85;
-  float batteryVoltage = 48.2;
-  float voltage = 48.2;  // compatibility
-  float current = 2.5;
+  int batteryPercent = 0;
+  float batteryVoltage = 0;
+  float voltage = 0;
+  float current = 0;
   bool isCharging = false;
-  bool bluetoothConnected = true;  // Bluetooth connection status
+  bool bluetoothConnected = false;  // Bluetooth connection status
   // Turn indicators
   bool turnLeftActive = false;    // Rẽ trái active
   bool turnRightActive = false;   // Rẽ phải active
   // Motor data
-  int motorTemp = 45;        // Nhiệt độ động cơ (°C)
-  int ecuTemp = 38;          // Nhiệt độ ECU (°C)
-  float motorCurrent = 4.3;  // Dòng điện động cơ (A)
-  int motorPower = 750;
-  
+  int motorTemp = 0;        // Nhiệt độ động cơ (°C)
+  int ecuTemp = 0;          // Nhiệt độ ECU (°C)
+  float motorCurrent = 0;  // Dòng điện động cơ (A)
+  int motorPower = 0;
+
   // Battery 1 data
-  float battery1Volt = 48.2;    // Điện áp battery 1 (V)
-  int battery1Percent = 85;     // % battery 1
-  int battery1Temp = 28;        // Nhiệt độ battery 1 (°C)
-  float battery1Current = 2.5;  // Dòng điện battery 1 (A)
-  uint16_t battery1DiffVolt = 200; // Chênh lệch điện áp battery 1 (mV)
-  
-  // Battery 2 data  
-  float battery2Volt = 47.8;    // Điện áp battery 2 (V)
-  int battery2Percent = 82;     // % battery 2
-  int battery2Temp = 31;        // Nhiệt độ battery 2 (°C)
-  float battery2Current = 1.8;  // Dòng điện battery 2 (A)
-  uint16_t battery2DiffVolt = 100; // Chênh lệch điện áp battery 2 (mV)
+  float battery1Volt = 0;    // Điện áp battery 1 (V)
+  int battery1Percent = 0;     // % battery 1
+  int battery1Temp = 0;        // Nhiệt độ battery 1 (°C)
+  float battery1Current = 0;  // Dòng điện battery 1 (A)
+  uint16_t battery1DiffVolt = 0; // Chênh lệch điện áp battery 1 (mV)
+
+  // Battery 2 data
+  float battery2Volt = 0;    // Điện áp battery 2 (V)
+  int battery2Percent = 0;     // % battery 2
+  int battery2Temp = 0;        // Nhiệt độ battery 2 (°C)
+  float battery2Current = 0;  // Dòng điện battery 2 (A)
+  uint16_t battery2DiffVolt = 0; // Chênh lệch điện áp battery 2 (mV)
 
   // Distance data
-  float odometer = 1234.5;
-  float distance = 12.3;
-  float tripDistance = 12.3;
+  float odometer = 0;
+  float distance = 0;
+  float tripDistance = 0;
 
   // Time data
-  int time = 1800;
+  int time = 0;
 
 };
 
@@ -141,6 +141,27 @@ struct BikeDataDisplay {
 // ================================================
 // CONVERSION FUNCTIONS
 // ================================================
+
+// Helper function: Get maximum temperature from all available sensors for a BMS
+inline float getMaxBMSTemperature(const BMSData& bms) {
+    float maxTemp = bms.temperature;  // Battery temperature (primary)
+    
+    // Check power temperature (MOSFET temperature)
+    if (bms.powerTemp > -50.0f && bms.powerTemp < 150.0f) {  // Valid range check
+        maxTemp = max(maxTemp, bms.powerTemp);
+    }
+    
+    // Check box temperature (BMS controller temperature)  
+    if (bms.boxTemp > -50.0f && bms.boxTemp < 150.0f) {  // Valid range check
+        maxTemp = max(maxTemp, bms.boxTemp);
+    }
+    
+    // Debug: Print max temperature calculation (disabled)
+    // Serial.printf("🔥 [MaxTemp] Battery: %.1f°C, Power: %.1f°C, Box: %.1f°C → Max: %.1f°C\n", 
+    //              bms.temperature, bms.powerTemp, bms.boxTemp, maxTemp);
+    
+    return maxTemp;
+}
 
 // Convert BikeStatus (from main) to BikeDataDisplay (for display)
 // Uses leftSignal & rightSignal directly from BikeStatus
@@ -150,7 +171,14 @@ inline BikeDataDisplay convertToDisplayData(const BikeStatus& status, bool bleCo
     
     // Basic data
     displayData.speed = status.bikeSpeed;
-    displayData.current = (status.bms1.current + status.bms2.current) / 2.0f;
+    
+    // Current logic: Speed ~0 use battery current, otherwise use motor current
+    if (status.bikeSpeed <= 0.1f) {  // Speed approximately 0 (threshold 0.1 km/h)
+        displayData.current = status.bms1.current + status.bms2.current;  // Total battery current
+    } else {
+        displayData.current = status.vesc.motorCurrent;  // Motor current when moving
+    }
+    
     displayData.voltage = (status.bms1.voltage + status.bms2.voltage) / 2.0f;
     displayData.batteryVoltage = displayData.voltage;
     
@@ -171,14 +199,14 @@ inline BikeDataDisplay convertToDisplayData(const BikeStatus& status, bool bleCo
     // Battery 1 data
     displayData.battery1Volt = status.bms1.voltage;
     displayData.battery1Percent = status.bms1.soc;
-    displayData.battery1Temp = (int)status.bms1.temperature;
+    displayData.battery1Temp = (int)getMaxBMSTemperature(status.bms1);  // Use maximum temperature
     displayData.battery1Current = status.bms1.current;
     displayData.battery1DiffVolt = status.bms1.cellVoltageDelta; // Already in mV
     
     // Battery 2 data
     displayData.battery2Volt = status.bms2.voltage;
     displayData.battery2Percent = status.bms2.soc;
-    displayData.battery2Temp = (int)status.bms2.temperature;
+    displayData.battery2Temp = (int)getMaxBMSTemperature(status.bms2);  // Use maximum temperature
     displayData.battery2Current = status.bms2.current;
     displayData.battery2DiffVolt = status.bms2.cellVoltageDelta; // Already in mV
     
