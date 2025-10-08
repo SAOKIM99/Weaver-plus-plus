@@ -2,9 +2,9 @@
 #define BLE_BIKE_INFO_H
 
 #include "BLEServiceManager.h"
-#include "../Bike_Hardware/BikeHardware.h"
 #include <Preferences.h>
 #include <NimBLEDevice.h>
+#include <BikeData.h>
 
 // Service và Characteristic UUIDs cho Bike Info
 #define BIKE_INFO_SERVICE_UUID      "12345678-1234-1234-1234-123456789abc"

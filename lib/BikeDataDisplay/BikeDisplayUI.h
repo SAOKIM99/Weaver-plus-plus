@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <cstdio>
 #include <lvgl.h>
+#include "BikeData.h"
 
 // ================================================
 // SCREEN CONFIGURATION DEFINES
@@ -198,59 +199,11 @@
 #define TURN_ICON_FONT        &lv_font_montserrat_20
 #define TURN_ICON_TEXT_ALIGN  LV_TEXT_ALIGN_CENTER
 
-// ================================================
-// BIKE DATA STRUCTURE
-// ================================================
-struct BikeData {
-  float speed = 0;
-  int gear = 3;
-  // Battery data
-  float batteryLevel = 85.5;
-  int batteryPercent = 85;
-  float batteryVoltage = 48.2;
-  int battery = 85;  // compatibility with old code
-  float voltage = 48.2;  // compatibility
-  float current = 2.5;
-  bool isCharging = false;
-  bool bluetoothConnected = true;  // Bluetooth connection status
-  // Turn indicators
-  bool turnLeftActive = false;    // Rẽ trái active
-  bool turnRightActive = false;   // Rẽ phải active
-  // Motor data
-  int motorTemp = 45;        // Nhiệt độ động cơ (°C)
-  int ecuTemp = 38;          // Nhiệt độ ECU (°C)
-  float motorCurrent = 4.3;  // Dòng điện động cơ (A)
-  int motorPower = 750;
-  
-  // Battery 1 data
-  float battery1Volt = 48.2;    // Điện áp battery 1 (V)
-  int battery1Percent = 85;     // % battery 1
-  int battery1Temp = 28;        // Nhiệt độ battery 1 (°C)
-  float battery1Current = 2.5;  // Dòng điện battery 1 (A)
-  float battery1DiffVolt = 0.2; // Chênh lệch điện áp battery 1 (V)
-  
-  // Battery 2 data  
-  float battery2Volt = 47.8;    // Điện áp battery 2 (V)
-  int battery2Percent = 82;     // % battery 2
-  int battery2Temp = 31;        // Nhiệt độ battery 2 (°C)
-  float battery2Current = 1.8;  // Dòng điện battery 2 (A)
-  float battery2DiffVolt = -0.1; // Chênh lệch điện áp battery 2 (V)
-  // Distance data
-  float odometer = 1234.5;
-  float distance = 12.3;
-  float tripDistance = 12.3;
-  // Time data
-  int time = 1800;
-  int tripTime = 1800;
-  int tripHours = 0;
-  int tripMinutes = 30;
-  float avgSpeed = 24.5;
-};
 
 // ================================================
 // BIKE DASHBOARD CLASS
 // ================================================
-class BikeDataDisplay {
+class BikeDisplayUI {
 private:
   // UI Objects
   lv_obj_t *ui_main_screen;
@@ -315,8 +268,8 @@ private:
   lv_color_t getColorByPercent(int percent, int lowThresh, int highThresh);
 
 public:
-  BikeDataDisplay();
-  ~BikeDataDisplay();
+  BikeDisplayUI();
+  ~BikeDisplayUI();
   
   // Initialization
   bool initialize(lv_obj_t *parent_screen = NULL);
@@ -328,14 +281,14 @@ public:
   void updateBattery(int percent);
   void updateECU(int temperature);
   void updateMotor(int temperature, float current);
-  void updateBattery1(float volt, int percent, float diffVolt, int temp, float current);
-  void updateBattery2(float volt, int percent, float diffVolt, int temp, float current);
+  void updateBattery1(float volt, int percent, uint16_t diffVoltMv, int temp, float current);
+  void updateBattery2(float volt, int percent, uint16_t diffVoltMv, int temp, float current);
   void updateOdometer(float distance);
   void updateBluetooth(bool connected);
   void updateTurnIndicators(bool leftActive, bool rightActive);
   
   // Update method - all data at once
-  void updateAll(const BikeData& data);
+  void updateAll(const BikeDataDisplay& data);
   
   // Theme and styling
   void setTheme(int themeId);

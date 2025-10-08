@@ -1,6 +1,5 @@
-#include "BikeDataDisplay.h"
+#include "BikeDisplayUI.h"
 #include <cstdio>
-
 // External font - include the font file
 #include "font/orbitron_num_80.c"
 
@@ -22,7 +21,7 @@
 #endif
 
 // Constructor
-BikeDataDisplay::BikeDataDisplay() {
+BikeDisplayUI::BikeDisplayUI() {
   ui_main_screen = NULL;
   ui_speed_arc = NULL;
   ui_speed_label = NULL;
@@ -56,13 +55,13 @@ BikeDataDisplay::BikeDataDisplay() {
 }
 
 // Destructor
-BikeDataDisplay::~BikeDataDisplay() {
+BikeDisplayUI::~BikeDisplayUI() {
   // LVGL objects are managed by the LVGL library
   // No manual cleanup needed
 }
 
 // Initialize the display
-bool BikeDataDisplay::initialize(lv_obj_t *parent_screen) {
+bool BikeDisplayUI::initialize(lv_obj_t *parent_screen) {
   if (parent_screen == NULL) {
     ui_main_screen = lv_scr_act();
   } else {
@@ -86,7 +85,7 @@ bool BikeDataDisplay::initialize(lv_obj_t *parent_screen) {
 }
 
 // Set speed font
-void BikeDataDisplay::setSpeedFont(const lv_font_t* font) {
+void BikeDisplayUI::setSpeedFont(const lv_font_t* font) {
   speed_font = font;
   if (ui_speed_label && font) {
     lv_obj_set_style_text_font(ui_speed_label, font, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -94,7 +93,7 @@ void BikeDataDisplay::setSpeedFont(const lv_font_t* font) {
 }
 
 // Create speedometer - khôi phục layout gốc
-void BikeDataDisplay::createSpeedometer() {
+void BikeDisplayUI::createSpeedometer() {
   /* Speed arc - L shape (từ góc dưới trái → lên trái → sang phải trên) */
   ui_speed_arc = lv_arc_create(ui_main_screen);
   lv_obj_set_size(ui_speed_arc, SPEED_ARC_WIDTH, SPEED_ARC_HEIGHT);
@@ -146,7 +145,7 @@ void BikeDataDisplay::createSpeedometer() {
 }
 
 // Create current display - khôi phục layout gốc  
-void BikeDataDisplay::createCurrentDisplay() {
+void BikeDisplayUI::createCurrentDisplay() {
   /* Current arc */
   ui_current_arc = lv_arc_create(ui_main_screen);
   lv_obj_set_size(ui_current_arc, CURRENT_ARC_WIDTH, CURRENT_ARC_HEIGHT);
@@ -195,7 +194,7 @@ void BikeDataDisplay::createCurrentDisplay() {
 }
 
 // Create battery display - khôi phục layout gốc
-void BikeDataDisplay::createBatteryDisplay() {
+void BikeDisplayUI::createBatteryDisplay() {
   // Battery percentage ở giữa trên
   ui_battery_text = lv_label_create(ui_main_screen);
   char bat_text[10];
@@ -335,7 +334,7 @@ void BikeDataDisplay::createBatteryDisplay() {
 }
 
 // Create ECU temperature display - khôi phục layout gốc
-void BikeDataDisplay::createECUDisplay() {
+void BikeDisplayUI::createECUDisplay() {
   // ECU Label "ECU" riêng - căn lề phải, phía trên
   ui_ecu_label = lv_label_create(ui_main_screen);
   lv_label_set_text(ui_ecu_label, "ECU");
@@ -358,7 +357,7 @@ void BikeDataDisplay::createECUDisplay() {
 }
 
 // Create motor display - khôi phục layout gốc
-void BikeDataDisplay::createMotorDisplay() {
+void BikeDisplayUI::createMotorDisplay() {
   // Motor Label "MOTOR" riêng - căn lề phải, phía trên
   ui_motor_label = lv_label_create(ui_main_screen);
   lv_label_set_text(ui_motor_label, "MOTOR");
@@ -392,7 +391,7 @@ void BikeDataDisplay::createMotorDisplay() {
 }
 
 // Create odometer - khôi phục layout gốc
-void BikeDataDisplay::createOdometer() {
+void BikeDisplayUI::createOdometer() {
   // ODO Display (bottom center) 
   ui_odo_label = lv_label_create(ui_main_screen);
   char odo_text[30];
@@ -404,21 +403,21 @@ void BikeDataDisplay::createOdometer() {
 }
 
 // Helper: Get color by temperature
-lv_color_t BikeDataDisplay::getColorByTemperature(int temp, int lowThresh, int highThresh) {
+lv_color_t BikeDisplayUI::getColorByTemperature(int temp, int lowThresh, int highThresh) {
   if (temp < lowThresh) return UI_COLOR_SUCCESS;
   else if (temp < highThresh) return UI_COLOR_WARNING;
   else return UI_COLOR_DANGER;
 }
 
 // Helper: Get color by percentage
-lv_color_t BikeDataDisplay::getColorByPercent(int percent, int lowThresh, int highThresh) {
+lv_color_t BikeDisplayUI::getColorByPercent(int percent, int lowThresh, int highThresh) {
   if (percent < lowThresh) return UI_COLOR_DANGER;
   else if (percent < highThresh) return UI_COLOR_WARNING;
   else return UI_COLOR_SUCCESS;
 }
 
 // Create Bluetooth Icon - khôi phục layout gốc
-void BikeDataDisplay::createBluetoothIcon() {
+void BikeDisplayUI::createBluetoothIcon() {
   // Bluetooth Symbol Icon ở phía dưới bên phải
   ui_bluetooth_icon = lv_label_create(ui_main_screen);
   lv_label_set_text(ui_bluetooth_icon, LV_SYMBOL_BLUETOOTH);
@@ -429,7 +428,7 @@ void BikeDataDisplay::createBluetoothIcon() {
 }
 
 // Create Turn Indicators
-void BikeDataDisplay::createTurnIndicators() {
+void BikeDisplayUI::createTurnIndicators() {
   // Turn Left Arrow (bên trái battery %)
   ui_turn_left_icon = lv_label_create(ui_main_screen);
   lv_label_set_text(ui_turn_left_icon, LV_SYMBOL_LEFT);
@@ -448,7 +447,7 @@ void BikeDataDisplay::createTurnIndicators() {
 }
 
 // Update speed
-void BikeDataDisplay::updateSpeed(float speed) {
+void BikeDisplayUI::updateSpeed(float speed) {
   if (!ui_speed_arc || !ui_speed_label) return;
   
   char buffer[16];
@@ -475,7 +474,7 @@ void BikeDataDisplay::updateSpeed(float speed) {
 }
 
 // Update current
-void BikeDataDisplay::updateCurrent(float current) {
+void BikeDisplayUI::updateCurrent(float current) {
   if (!ui_current_arc  || !ui_current_text) return;
   
   // Determine if charging (positive) or discharging (negative)
@@ -517,7 +516,7 @@ void BikeDataDisplay::updateCurrent(float current) {
 }
 
 // Update battery percentage
-void BikeDataDisplay::updateBattery(int percent) {
+void BikeDisplayUI::updateBattery(int percent) {
   if (!ui_battery_text) return;
   
   char buffer[16];
@@ -530,7 +529,7 @@ void BikeDataDisplay::updateBattery(int percent) {
 }
 
 // Update ECU temperature
-void BikeDataDisplay::updateECU(int temperature) {
+void BikeDisplayUI::updateECU(int temperature) {
   if (!ui_ecu_temp_label) return;
   
   char buffer[16];
@@ -543,7 +542,7 @@ void BikeDataDisplay::updateECU(int temperature) {
 }
 
 // Update motor temperature and current
-void BikeDataDisplay::updateMotor(int temperature, float current) {
+void BikeDisplayUI::updateMotor(int temperature, float current) {
   if (ui_motor_temp_value) {
     char temp_buffer[16];
     sprintf(temp_buffer, "%d°C", temperature);
@@ -562,7 +561,7 @@ void BikeDataDisplay::updateMotor(int temperature, float current) {
 }
 
 // Update Battery 1
-void BikeDataDisplay::updateBattery1(float volt, int percent, float diffVolt, int temp, float current) {
+void BikeDisplayUI::updateBattery1(float volt, int percent, uint16_t diffVoltMv, int temp, float current) {
   if (ui_bat1_volt_value) {
     char buffer[16];
     sprintf(buffer, "%.1fV", volt);
@@ -579,10 +578,13 @@ void BikeDataDisplay::updateBattery1(float volt, int percent, float diffVolt, in
   
   if (ui_bat1_diff_value) {
     char buffer[16];
-    sprintf(buffer, "%+.1fV", diffVolt);
+    sprintf(buffer, "%dmV", diffVoltMv);
     lv_label_set_text(ui_bat1_diff_value, buffer);
-    lv_color_t color = (diffVolt > 0.5 || diffVolt < -0.5) ? UI_COLOR_DANGER : UI_COLOR_SUCCESS;
+    lv_color_t color = (diffVoltMv > 500) ? UI_COLOR_DANGER : UI_COLOR_SUCCESS;  // 500mV threshold
     lv_obj_set_style_text_color(ui_bat1_diff_value, color, LV_PART_MAIN | LV_STATE_DEFAULT);
+    
+    Serial.printf("🖥️  [UI] BAT1 Display: %dmV → '%s' (Color: %s)\n", 
+                  diffVoltMv, buffer, (diffVoltMv > 500) ? "RED" : "GREEN");
   }
   
   if (ui_bat1_temp_value) {
@@ -601,7 +603,7 @@ void BikeDataDisplay::updateBattery1(float volt, int percent, float diffVolt, in
 }
 
 // Update Battery 2
-void BikeDataDisplay::updateBattery2(float volt, int percent, float diffVolt, int temp, float current) {
+void BikeDisplayUI::updateBattery2(float volt, int percent, uint16_t diffVoltMv, int temp, float current) {
   if (ui_bat2_volt_value) {
     char buffer[16];
     sprintf(buffer, "%.1fV", volt);
@@ -618,10 +620,13 @@ void BikeDataDisplay::updateBattery2(float volt, int percent, float diffVolt, in
   
   if (ui_bat2_diff_value) {
     char buffer[16];
-    sprintf(buffer, "%+.1fV", diffVolt);
+    sprintf(buffer, "%dmV", diffVoltMv);
     lv_label_set_text(ui_bat2_diff_value, buffer);
-    lv_color_t color = (diffVolt > 0.5 || diffVolt < -0.5) ? UI_COLOR_DANGER : UI_COLOR_SUCCESS;
+    lv_color_t color = (diffVoltMv > 500) ? UI_COLOR_DANGER : UI_COLOR_SUCCESS;  // 500mV threshold
     lv_obj_set_style_text_color(ui_bat2_diff_value, color, LV_PART_MAIN | LV_STATE_DEFAULT);
+    
+    Serial.printf("🖥️  [UI] BAT2 Display: %dmV → '%s' (Color: %s)\n", 
+                  diffVoltMv, buffer, (diffVoltMv > 500) ? "RED" : "GREEN");
   }
   
   if (ui_bat2_temp_value) {
@@ -640,7 +645,7 @@ void BikeDataDisplay::updateBattery2(float volt, int percent, float diffVolt, in
 }
 
 // Update odometer
-void BikeDataDisplay::updateOdometer(float distance) {
+void BikeDisplayUI::updateOdometer(float distance) {
   if (!ui_odo_label) return;
   
   char buffer[32];
@@ -649,7 +654,7 @@ void BikeDataDisplay::updateOdometer(float distance) {
 }
 
 // Update Bluetooth status
-void BikeDataDisplay::updateBluetooth(bool connected) {
+void BikeDisplayUI::updateBluetooth(bool connected) {
   if (!ui_bluetooth_icon) return;
   
   if (connected) {
@@ -660,7 +665,7 @@ void BikeDataDisplay::updateBluetooth(bool connected) {
 }
 
 // Update Turn Indicators
-void BikeDataDisplay::updateTurnIndicators(bool leftActive, bool rightActive) {
+void BikeDisplayUI::updateTurnIndicators(bool leftActive, bool rightActive) {
   if (!ui_turn_left_icon || !ui_turn_right_icon) return;
   
   // Left turn indicator
@@ -679,7 +684,7 @@ void BikeDataDisplay::updateTurnIndicators(bool leftActive, bool rightActive) {
 }
 
 // Update all data at once
-void BikeDataDisplay::updateAll(const BikeData& data) {
+void BikeDisplayUI::updateAll(const BikeDataDisplay& data) {
   updateSpeed(data.speed);
   updateCurrent(data.current);
   updateBattery(data.batteryPercent);
@@ -693,19 +698,19 @@ void BikeDataDisplay::updateAll(const BikeData& data) {
 }
 
 // Theme setting (placeholder)
-void BikeDataDisplay::setTheme(int themeId) {
+void BikeDisplayUI::setTheme(int themeId) {
   // Future implementation for different themes
 }
 
 // Set speed range
-void BikeDataDisplay::setSpeedRange(int maxSpeed) {
+void BikeDisplayUI::setSpeedRange(int maxSpeed) {
   if (ui_speed_arc) {
     lv_arc_set_range(ui_speed_arc, SPEED_ARC_MIN, maxSpeed);
   }
 }
 
 // Set current range
-void BikeDataDisplay::setCurrentRange(int maxCurrent) {
+void BikeDisplayUI::setCurrentRange(int maxCurrent) {
   if (ui_current_arc) {
     lv_arc_set_range(ui_current_arc, CURRENT_ARC_MIN, maxCurrent);
   }

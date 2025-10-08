@@ -2,9 +2,10 @@
 
 #include "Arduino.h"
 #include <SoftwareSerial.h>
-#include "../Bike_Hardware/BikeHardware.h"
 #include "../JKBMSInterface/JKBMSInterface.h"
 #include "../Vesc_Uart/src/VescUart.h"
+#include "BikeMainHardware.h"
+#include "BikeData.h"
 
 class BikeSensorManager {
 private:

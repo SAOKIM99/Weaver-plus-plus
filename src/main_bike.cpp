@@ -6,12 +6,14 @@
 #include "BLEBikeManager.h"
 #include "BikeRFIDManager.h"
 #include "BikeSensorManager.h"
-#include "../lib/Bike_Hardware/BikeHardware.h"
+#include "BikeCANManager.h"
+#include "BikeData.h"
 
 // Create instances
 BLEBikeManager bleManager;
 BikeRFIDManager rfidManager;
 BikeSensorManager sensorManager;
+BikeCANManager canManager;
 
 // RTOS Task Handles
 TaskHandle_t bleTaskHandle = NULL;
@@ -19,28 +21,14 @@ TaskHandle_t rfidTaskHandle = NULL;
 TaskHandle_t sensorTaskHandle = NULL;
 TaskHandle_t systemTaskHandle = NULL;
 TaskHandle_t displayTaskHandle = NULL;
+TaskHandle_t canTaskHandle = NULL;
 
 // RTOS Synchronization
 SemaphoreHandle_t bikeDataMutex;
 QueueHandle_t systemEventQueue;
 
-// System Events
-enum SystemEvent {
-    EVENT_RFID_CARD_DETECTED,
-    EVENT_BIKE_UNLOCKED,
-    EVENT_BIKE_LOCKED,
-    EVENT_BLE_CONNECTED,
-    EVENT_BLE_DISCONNECTED,
-    EVENT_EMERGENCY_STOP
-};
-
-// Shared data structure
-struct SharedBikeData {
-    BikeStatus sensorData;
-    bool bikeUnlocked;
-    bool bleConnected;
-    BikeOperationState currentState;
-} sharedData;
+// Shared data instance
+SharedBikeData sharedData;
 
 // Master RFID card for bike access
 const String MASTER_CARD_UID = "29:0E:72:43"; // Master card always authorized
@@ -122,11 +110,11 @@ void sensorTask(void *parameter) {
         
         // Check for emergency conditions
         BikeStatus currentData = sensorManager.getBikeStatus();
-        if (!currentData.bms1.connected && !currentData.bms2.connected) {
-            // Both BMS disconnected - emergency!
-            SystemEvent event = EVENT_EMERGENCY_STOP;
-            xQueueSend(systemEventQueue, &event, 0);
-        }
+        // if (!currentData.bms1.connected && !currentData.bms2.connected) {
+        //     // Both BMS disconnected - emergency!
+        //     SystemEvent event = EVENT_EMERGENCY_STOP;
+        //     xQueueSend(systemEventQueue, &event, 0);
+        // }
         
         // Standard sensor update rate
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(200)); // 5Hz
@@ -194,7 +182,29 @@ void systemTask(void *parameter) {
     }
 }
 
-// Task 5: Display/Logging Task (Low Priority - Non-critical output)
+// Task 5: CAN Communication Task (Medium Priority - Display communication)
+void canTask(void *parameter) {
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    
+    Serial.println("[CAN_TASK] Started");
+    
+    while (true) {
+        // Send data in sequence every 500ms
+        if (xSemaphoreTake(bikeDataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            // Use library's automatic sequence sending
+            canManager.sendNextInSequence(sharedData);
+            xSemaphoreGive(bikeDataMutex);
+        }
+        
+        // Handle incoming messages
+        canManager.update();
+        
+        // CAN task runs at 2Hz (500ms interval)
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(500));
+    }
+}
+
+// Task 6: Display/Logging Task (Low Priority - Non-critical output)
 void displayTask(void *parameter) {
     TickType_t xLastWakeTime = xTaskGetTickCount();
     
@@ -226,26 +236,29 @@ void displayTask(void *parameter) {
             // BMS Status
             Serial.printf("🔋 BMS1: %s", sharedData.sensorData.bms1.connected ? "OK" : "FAIL");
             if (sharedData.sensorData.bms1.connected) {
-                Serial.printf(" %.2fV %.1fA %d%% %.1f°C", 
+                Serial.printf(" %.2fV %.1fA %d%% %.1f°C Δ%dmV", 
                              sharedData.sensorData.bms1.voltage, sharedData.sensorData.bms1.current, 
-                             sharedData.sensorData.bms1.soc, sharedData.sensorData.bms1.temperature);
+                             sharedData.sensorData.bms1.soc, sharedData.sensorData.bms1.temperature,
+                             sharedData.sensorData.bms1.cellVoltageDelta);
             }
             Serial.println();
             
             Serial.printf("🔋 BMS2: %s", sharedData.sensorData.bms2.connected ? "OK" : "FAIL");
             if (sharedData.sensorData.bms2.connected) {
-                Serial.printf(" %.2fV %.1fA %d%% %.1f°C", 
+                Serial.printf(" %.2fV %.1fA %d%% %.1f°C Δ%dmV", 
                              sharedData.sensorData.bms2.voltage, sharedData.sensorData.bms2.current, 
-                             sharedData.sensorData.bms2.soc, sharedData.sensorData.bms2.temperature);
+                             sharedData.sensorData.bms2.soc, sharedData.sensorData.bms2.temperature,
+                             sharedData.sensorData.bms2.cellVoltageDelta);
             }
             Serial.println();
             
             // Task Status
-            Serial.printf("⚙️  Tasks: BLE=%d RFID=%d SENSOR=%d SYSTEM=%d DISPLAY=%d\n",
+            Serial.printf("⚙️  Tasks: BLE=%d RFID=%d SENSOR=%d SYSTEM=%d CAN=%d DISPLAY=%d\n",
                          uxTaskPriorityGet(bleTaskHandle),
                          uxTaskPriorityGet(rfidTaskHandle), 
                          uxTaskPriorityGet(sensorTaskHandle),
                          uxTaskPriorityGet(systemTaskHandle),
+                         uxTaskPriorityGet(canTaskHandle),
                          uxTaskPriorityGet(displayTaskHandle));
                          
             Serial.printf("💾 Free Heap: %d bytes\n", ESP.getFreeHeap());
@@ -302,7 +315,12 @@ void setup() {
     Serial.println("\n📊 3. Initializing Sensor System...");
     sensorManager.begin();
     
-    Serial.println("\n⚙️  4. Creating RTOS Tasks...");
+    Serial.println("\n🔗 4. Initializing CAN Bus...");
+    if (!canManager.begin()) {
+        Serial.println("⚠️  System will continue without CAN communication");
+    }
+    
+    Serial.println("\n⚙️  5. Creating RTOS Tasks...");
     
     // Create tasks with appropriate priorities
     xTaskCreatePinnedToCore(
@@ -346,6 +364,16 @@ void setup() {
     );
     
     xTaskCreatePinnedToCore(
+        canTask,           // Task function
+        "CANTask",         // Task name
+        3072,              // Stack size
+        NULL,              // Parameters
+        2,                 // Priority (Medium-Low)
+        &canTaskHandle,    // Task handle
+        0                  // Core 0 (same as Display)
+    );
+    
+    xTaskCreatePinnedToCore(
         displayTask,       // Task function
         "DisplayTask",     // Task name
         3072,              // Stack size
@@ -357,11 +385,12 @@ void setup() {
     
     Serial.println("\n✅ === RTOS SYSTEM READY ===");
     Serial.println("📋 Task Distribution:");
-    Serial.println("   🎯 Core 0: BLE + Display");
+    Serial.println("   🎯 Core 0: BLE + CAN + Display");
     Serial.println("   🎯 Core 1: System + RFID + Sensors");
     Serial.println("🔧 Instructions:");
     Serial.println("   - Use RFID card to lock/unlock bike");
     Serial.println("   - BLE: Press BOOT for new devices");
+    Serial.println("   - CAN: Sends bike status to display board");
     Serial.println("   - All sensors monitoring active");
     Serial.println("   - Real-time RTOS task management");
     Serial.println("=================================");

@@ -5,7 +5,7 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include "BLEBikeInfo.h"
-#include "../Bike_Hardware/BikeHardware.h"
+#include "BikeData.h"
 
 // Boot button and security definitions
 #define BOOT_BUTTON_PIN 0

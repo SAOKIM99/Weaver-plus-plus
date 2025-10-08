@@ -3,7 +3,6 @@
 
 
 #include "JbdBms.h"
-#include "../Bike_Hardware/BikeHardware.h"
 
 #define MAX_PROTECTION 1000
 

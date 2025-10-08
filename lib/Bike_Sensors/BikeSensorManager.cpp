@@ -120,11 +120,35 @@ void BikeSensorManager::updateBMSData() {
     
     // Check if BMS1 data is valid and update bike status
     if (bms1.isDataValid()) {
+        // Basic measurements
         bikeStatus.bms1.voltage = bms1.getVoltage();
         bikeStatus.bms1.current = bms1.getCurrent();
         bikeStatus.bms1.soc = bms1.getSOC();
         bikeStatus.bms1.temperature = bms1.getBatteryTemp();
         bikeStatus.bms1.connected = true;
+        
+        // Extended data
+        bikeStatus.bms1.cycles = bms1.getCycles();
+        bikeStatus.bms1.powerTemp = bms1.getPowerTemp();
+        bikeStatus.bms1.boxTemp = bms1.getBoxTemp();
+        
+        // Cell voltage info
+        bikeStatus.bms1.numCells = bms1.getNumCells();
+        bikeStatus.bms1.lowestCellVolt = bms1.getLowestCellVoltage();
+        bikeStatus.bms1.highestCellVolt = bms1.getHighestCellVoltage();
+        bikeStatus.bms1.cellVoltageDelta = (uint16_t)(bms1.getCellVoltageDelta() * 1000); // Convert V to mV
+        
+        // Status flags
+        bikeStatus.bms1.alarmStatus = bms1.getAlarmStatus();
+        bikeStatus.bms1.statusInfo = bms1.getStatusInfo();
+        bikeStatus.bms1.isCharging = bms1.isCharging();
+        bikeStatus.bms1.isDischarging = bms1.isDischarging();
+        bikeStatus.bms1.chargingEnabled = bms1.isChargingEnabled();
+        bikeStatus.bms1.dischargingEnabled = bms1.isDischargingEnabled();
+        
+        // Device info
+        bikeStatus.bms1.softwareVersion = bms1.getSoftwareVersion();
+        bikeStatus.bms1.deviceInfo = bms1.getDeviceInfo();
     } else {
         bikeStatus.bms1.connected = false;
     }
@@ -134,11 +158,35 @@ void BikeSensorManager::updateBMSData() {
     
     // Check if BMS2 data is valid and update bike status
     if (bms2.isDataValid()) {
+        // Basic measurements
         bikeStatus.bms2.voltage = bms2.getVoltage();
         bikeStatus.bms2.current = bms2.getCurrent();
         bikeStatus.bms2.soc = bms2.getSOC();
         bikeStatus.bms2.temperature = bms2.getBatteryTemp();
         bikeStatus.bms2.connected = true;
+        
+        // Extended data
+        bikeStatus.bms2.cycles = bms2.getCycles();
+        bikeStatus.bms2.powerTemp = bms2.getPowerTemp();
+        bikeStatus.bms2.boxTemp = bms2.getBoxTemp();
+        
+        // Cell voltage info
+        bikeStatus.bms2.numCells = bms2.getNumCells();
+        bikeStatus.bms2.lowestCellVolt = bms2.getLowestCellVoltage();
+        bikeStatus.bms2.highestCellVolt = bms2.getHighestCellVoltage();
+        bikeStatus.bms2.cellVoltageDelta = (uint16_t)(bms2.getCellVoltageDelta() * 1000); // Convert V to mV
+        
+        // Status flags
+        bikeStatus.bms2.alarmStatus = bms2.getAlarmStatus();
+        bikeStatus.bms2.statusInfo = bms2.getStatusInfo();
+        bikeStatus.bms2.isCharging = bms2.isCharging();
+        bikeStatus.bms2.isDischarging = bms2.isDischarging();
+        bikeStatus.bms2.chargingEnabled = bms2.isChargingEnabled();
+        bikeStatus.bms2.dischargingEnabled = bms2.isDischargingEnabled();
+        
+        // Device info
+        bikeStatus.bms2.softwareVersion = bms2.getSoftwareVersion();
+        bikeStatus.bms2.deviceInfo = bms2.getDeviceInfo();
     } else {
         bikeStatus.bms2.connected = false;
     }

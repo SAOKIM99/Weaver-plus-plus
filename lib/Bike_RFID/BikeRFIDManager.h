@@ -4,7 +4,7 @@
 #include <Preferences.h>
 #include <SPI.h>
 #include <MFRC522.h>
-#include "../Bike_Hardware/BikeHardware.h"
+#include <BikeMainHardware.h>
 
 class BikeRFIDManager {
 public:

@@ -28,52 +28,14 @@
 #define VESC_RX                         33
 #define VESC_TX                         27
 
+// CAN Bus pins (Main Board - VP230 transceiver)
+#define MAIN_CAN_TX                     25      // GPIO25 -> VP230 TXD
+#define MAIN_CAN_RX                     26      // GPIO26 -> VP230 RXD
+
 // Speed Calculation Constants
 #define WHEEL_DIAMETER_M                0.7        // 700mm wheel diameter (meters)
 #define WHEEL_CIRCUMFERENCE_M           (PI * WHEEL_DIAMETER_M)  // ~2.2m
 #define MAGNETS_PER_WHEEL_REVOLUTION    1          // 1 magnet per wheel revolution
 #define MS_TO_KMH_FACTOR               3.6        // m/s to km/h conversion
-
-// Bike States
-enum BikeOperationState {
-    BIKE_OFF = 0,
-    BIKE_ON = 1,
-    BIKE_LOCKED = 2,
-    BIKE_UNLOCKED = 3
-};
-
-// Sensor Data Structures
-struct BMSData {
-    float voltage;
-    float current;
-    float temperature;
-    uint8_t soc; // State of charge %
-    bool connected;
-};
-
-struct VESCData {
-    float motorRPM;
-    float inputVoltage;
-    float motorCurrent;
-    float inputCurrent;
-    float dutyCycle;
-    float tempFET;
-    float tempMotor;
-    bool connected;
-};
-
-struct BikeStatus {
-    BikeOperationState operationState;
-    bool brakePressed;
-    bool leftSignal;
-    bool rightSignal;
-    bool keyOn;
-    float hallFrequency;    // Raw Hall sensor frequency (Hz)
-    float bikeSpeed;        // Calculated bike speed (km/h)
-    BMSData bms1;
-    BMSData bms2;
-    VESCData vesc;
-    float analogReadings[8]; // For unused analog pins
-};
 
 #endif

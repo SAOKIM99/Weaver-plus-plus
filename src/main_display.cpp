@@ -1,7 +1,8 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 #include <lvgl.h>
-#include <BikeDataDisplay.h>
+#include <BikeDisplayUI.h>
+#include <BikeCANManager.h>
 
 // Khai báo TFT
 TFT_eSPI tft = TFT_eSPI();
@@ -16,10 +17,17 @@ static lv_color_t buf[screenWidth * 10];
 lv_obj_t *ui_main_screen;
 
 // BikeDataDisplay instance
-BikeDataDisplay dashboard;
+BikeDisplayUI dashboard;
 
-// Sample bike data
-BikeData bike;
+// CAN Manager instance
+BikeCANManager canManager;
+
+// Bike data - will be updated via CAN
+BikeDataDisplay bike;
+
+// CAN connection status
+bool canConnected = false;
+unsigned long lastCANMessage = 0;
 
 // LVGL flush callback
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
@@ -34,101 +42,84 @@ void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color
   lv_disp_flush_ready(disp);
 }
 
-// Mô phỏng dữ liệu xe
-void updateBikeData() {
-  static unsigned long lastUpdate = 0;
-  if(millis() - lastUpdate > 100) {
+// CAN receive callback function
+void onCANMessage(uint32_t id, uint8_t* data, uint8_t length) {
+    // Update last message time for connection status
+    lastCANMessage = millis();
+    canConnected = true;
     
-    // Mô phỏng tốc độ thay đổi
-    static float targetSpeed = 25.0;
-    if(random(100) < 5) {
-      targetSpeed = random(0, 80);
-    }
-    bike.speed += (targetSpeed - bike.speed) * 0.1;
+    Serial.printf("📨 [onCANMessage] Received ID=0x%03X, length=%d\n", id, length);
     
-    // Pin giảm dần
-    if(bike.speed > 10 && !bike.isCharging) {
-      bike.batteryPercent -= 0.001;
-      if(bike.batteryPercent < 0) bike.batteryPercent = 0;
-      bike.battery1Percent -= 0.001;
-      bike.battery2Percent -= 0.001;
+    // Parse the incoming CAN message
+    if (canManager.parseCANMessage(id, data, length, bike)) {
+        // Successfully parsed - log key data
+        switch(id) {
+            case MSG_ID_BIKE_STATUS:
+                Serial.printf("[CAN] Status: Speed=%.1f km/h, BT=%s, L=%s, R=%s\n",
+                            bike.speed,
+                            bike.bluetoothConnected ? "ON" : "OFF",
+                            bike.turnLeftActive ? "ON" : "OFF",
+                            bike.turnRightActive ? "ON" : "OFF");
+                break;
+                
+            case MSG_ID_BMS_DATA + 1: // BMS1
+                Serial.printf("[CAN] BMS1: %.2fV, %d%%, %.1f°C\n",
+                            bike.battery1Volt,
+                            bike.battery1Percent,
+                            (float)bike.battery1Temp);
+                break;
+                
+            case MSG_ID_BMS_DATA + 2: // BMS2
+                Serial.printf("[CAN] BMS2: %.2fV, %d%%, %.1f°C\n",
+                            bike.battery2Volt,
+                            bike.battery2Percent,
+                            (float)bike.battery2Temp);
+                break;
+                
+            case MSG_ID_VESC_DATA:
+                Serial.printf("[CAN] Motor: %.2fA, Motor=%.1f°C, ECU=%.1f°C\n",
+                            bike.motorCurrent,
+                            (float)bike.motorTemp,
+                            (float)bike.ecuTemp);
+                break;
+                
+            case MSG_ID_DISTANCE_DATA:
+                Serial.printf("[CAN] Distance: Odo=%.1fkm, Trip=%.1fkm\n",
+                            bike.odometer, bike.tripDistance);
+                break;
+        }
+    } else {
+        Serial.printf("[CAN] Parse failed for ID: 0x%03X\n", id);
     }
-    
-    // Cập nhật điện áp và dòng điện
-    bike.batteryVoltage = 48.0 + (bike.batteryPercent - 50) * 0.1;
-    bike.battery1Volt = 48.0 + (bike.battery1Percent - 50) * 0.1;
-    bike.battery2Volt = 48.0 + (bike.battery2Percent - 50) * 0.1;
-    
-    // Mô phỏng current (cho phép âm khi sạc)
-    static float detalCurrent = 1.5;
-    bike.current = bike.current + detalCurrent;
-    if (bike.current > 50)
-    {
-      detalCurrent = -1.4;
-    }
-    else if (bike.current < -50)
-    {
-      detalCurrent = 1.4;
-    }
+}
 
-    bike.isCharging = (bike.current < 0); // Nếu current âm thì đang sạc
-    
-    // Xóa logic sạc (charging) - không còn cần thiết
-    
-    // Cập nhật khoảng cách
-    bike.distance += bike.speed * 0.016667 / 60;  // km/h to km/frame
-    bike.odometer += bike.speed * 0.016667 / 60;
-    
-    // Mô phỏng nhiệt độ
-    float targetMotorTemp = 25 + (bike.speed * 0.7) + (bike.motorCurrent * 0.3);
-    bike.motorTemp += (targetMotorTemp - bike.motorTemp) * 0.05;
-    if(bike.motorTemp > 80) bike.motorTemp = 80;
-    if(bike.motorTemp < 25) bike.motorTemp = 25;
-    
-    float targetEcuTemp = 20 + (bike.speed * 0.3) + random(-2, 3);
-    bike.ecuTemp += (targetEcuTemp - bike.ecuTemp) * 0.03;
-    if(bike.ecuTemp > 50) bike.ecuTemp = 50;
-    if(bike.ecuTemp < 20) bike.ecuTemp = 20;
-    
-    bike.motorCurrent = bike.speed * 0.05 + bike.current * 0.8 + random(-2, 3) * 0.1;
-    if(bike.motorCurrent < 0) bike.motorCurrent = 0;
-    if(bike.motorCurrent > 10) bike.motorCurrent = 10;
-    
-    // Battery simulation
-    bike.battery1Current = bike.current * 0.6 + random(-1, 2) * 0.1;
-    bike.battery1Temp = 20 + (bike.battery1Current * 0.4) + (bike.speed * 0.1);
-    if(bike.battery1Temp > 50) bike.battery1Temp = 50;
-    if(bike.battery1Temp < 15) bike.battery1Temp = 15;
-    bike.battery1DiffVolt = random(-20, 30) * 0.01;
-    
-    bike.battery2Current = bike.current * 0.4 + random(-1, 2) * 0.1;
-    bike.battery2Temp = 18 + (bike.battery2Current * 0.5) + (bike.speed * 0.15);
-    if(bike.battery2Temp > 50) bike.battery2Temp = 50;
-    if(bike.battery2Temp < 15) bike.battery2Temp = 15;
-    bike.battery2DiffVolt = random(-15, 20) * 0.01;
-    
-    // Mô phỏng kết nối Bluetooth bật/tắt mỗi 5 giây
-    static unsigned long lastBluetoothToggle = 0;
-    if(millis() - lastBluetoothToggle > 5000) {
-      bike.bluetoothConnected = !bike.bluetoothConnected;
-      lastBluetoothToggle = millis();
+// Check CAN connection status
+void checkCANConnection() {
+    static unsigned long lastCheck = 0;
+    if (millis() - lastCheck > 1000) { // Check every second
+        if (millis() - lastCANMessage > 5000) { // No message for 5 seconds
+            if (canConnected) {
+                canConnected = false;
+                Serial.println("[CAN] Connection lost");
+            }
+        }
+        lastCheck = millis();
     }
-    
-    // Mô phỏng turn indicators - bật/tắt ngẫu nhiên mỗi 3 giây
-    static unsigned long lastTurnToggle = 0;
-    if(millis() - lastTurnToggle > 3000) {
-      int turnState = random(0, 4);  // 0=off, 1=left, 2=right, 3=both
-      bike.turnLeftActive = (turnState == 1 || turnState == 3);
-      bike.turnRightActive = (turnState == 2 || turnState == 3);
-      lastTurnToggle = millis();
-    }
-    
-    lastUpdate = millis();
-  }
 }
 
 void setup() {
   Serial.begin(115200);
+  Serial.println("=== SAO KIM Display Controller ===");
+  
+  // Initialize CAN Manager first with display board pins
+  if (canManager.begin(25, 26)) { // Display board CAN pins
+    Serial.println("✅ CAN Manager initialized successfully");
+    canManager.setReceiveCallback(onCANMessage);
+    Serial.println("✅ CAN Receive callback registered");
+  } else {
+    Serial.println("❌ CAN Manager initialization failed");
+    canConnected = false;
+  }
   
   // Khởi tạo LCD
   tft.init();
@@ -177,12 +168,12 @@ void setup() {
   bike.motorCurrent = 4.3;
   bike.battery1Volt = 48.2;
   bike.battery1Percent = 85;
-  bike.battery1DiffVolt = 0.2;
+  bike.battery1DiffVolt = 200; // 200mV
   bike.battery1Temp = 28;
   bike.battery1Current = 2.5;
   bike.battery2Volt = 47.8;
   bike.battery2Percent = 82;
-  bike.battery2DiffVolt = -0.1;
+  bike.battery2DiffVolt = 100; // 100mV
   bike.battery2Temp = 31;
   bike.battery2Current = 1.8;
   bike.odometer = 1234.5;
@@ -190,28 +181,38 @@ void setup() {
   bike.turnLeftActive = false;     // Khởi tạo turn indicators tắt
   bike.turnRightActive = false;
   
-  Serial.println("🚴‍♂️ LVGL Electric Bike Dashboard with BikeDataDisplay Library initialized!");
+  Serial.println("🚴‍♂️ LVGL Electric Bike Dashboard with CAN Support initialized!");
+  Serial.println("📡 Waiting for CAN messages from main controller...");
 }
 
 void loop() {
   static unsigned long lastUpdate = 0;
   
-  // Cập nhật dữ liệu
-  updateBikeData();
+  // Process incoming CAN messages
+  canManager.update();
+  
+  // Check CAN connection status
+  checkCANConnection();
   
   // Cập nhật dashboard mỗi 100ms
   if(millis() - lastUpdate > 100) {
     dashboard.updateAll(bike);
     lastUpdate = millis();
     
-    // Debug info
-    Serial.print("Speed: ");
-    Serial.print(bike.speed, 1);
-    Serial.print(" km/h, Current: ");
-    Serial.print(bike.current, 1);
-    Serial.print("A, Battery: ");
-    Serial.print(bike.batteryPercent);
-    Serial.println("%");
+    // Debug info với CAN status
+    Serial.printf("CAN:%s Speed:%.1f km/h Bat:%d%% Motor:%.1f°C BT:%s\n",
+                  canConnected ? "OK" : "LOST",
+                  bike.speed,
+                  bike.batteryPercent,
+                  (float)bike.motorTemp,
+                  bike.bluetoothConnected ? "ON" : "OFF");
+  }
+  
+  // Print CAN statistics every 10 seconds
+  static unsigned long lastStats = 0;
+  if (millis() - lastStats > 10000) {
+    Serial.printf("[STATS] CAN Messages Received: %d\n", canManager.getMessagesReceived());
+    lastStats = millis();
   }
   
   // Xử lý LVGL
