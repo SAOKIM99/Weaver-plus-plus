@@ -10,8 +10,6 @@ BLEBikeManager::BLEBikeManager() :
     currentState(BIKE_STATE_IDLE),
     connectionParam(nullptr),
     pairingInProgress(false),
-    bootButtonPressed(false),
-    lastBootButtonCheck(0),
     pairingStartTime(0),
     rfidManager(nullptr) {
 }
@@ -23,27 +21,19 @@ BLEBikeManager::~BLEBikeManager() {
 }
 
 void BLEBikeManager::begin() {
-    Serial.println("=== BLE Bike Manager Initialization ===");
+    Serial.println("========================================");
+    Serial.println("=== BLE Bike Manager with Bonding ===");
+    Serial.println("========================================");
     
     // Initialize boot button
     pinMode(MANUAL_AUTHENTICATION_PIN, INPUT_PULLUP);
     
-    // Initialize preferences for storing bonded devices
-    preferences.begin("bike-bonds", false);
-    
-    // Show current bonded devices
-    uint8_t bondCount = preferences.getUChar("bond_count", 0);
-    Serial.print("Found ");
-    Serial.print(bondCount);
-    Serial.println(" bonded devices");
-    
-    if (bondCount > 0) {
-        printBondedDevices();
-    }
-    
     // Initialize NimBLE
     NimBLEDevice::init("+ SAO KIM +");
     setPower();
+    
+    // Setup BLE security BEFORE creating server
+    setupSecurity();
     
     // Setup server and services
     setupServer();
@@ -53,14 +43,26 @@ void BLEBikeManager::begin() {
     // Start advertising
     startAdvertising();
     
+    // Show bonded device count from NimBLE stack
+    int bondCount = getBondedDevicesFromStack();
+    Serial.print("Found ");
+    Serial.print(bondCount);
+    Serial.println(" bonded devices in NimBLE stack");
+    
     Serial.println("BLE Bike Manager initialized successfully");
     Serial.println("=== Security Instructions ===");
     Serial.println("1. Device discoverable as '+ SAO KIM +'");
-    Serial.println("2. FIRST TIME: Press BOOT button OR scan RFID card to accept connection");
-    Serial.println("3. SUBSEQUENT: Auto-accepted for bonded devices");
-    Serial.println("4. BONDED DEVICES: Maximum 5 devices (FIFO replacement when full)");
-    Serial.println("5. Hold BOOT 5+ seconds to clear all bonds");
-    Serial.println("====================================");
+    Serial.println("2. FIRST TIME PAIRING:");
+    Serial.println("   - Connect from your device");
+    Serial.println("   - Check PIN displayed on Serial");
+    Serial.println("   - Press BOOT button OR scan RFID to accept");
+    Serial.println("   - Timeout: 10 seconds");
+    Serial.println("3. BONDED DEVICES:");
+    Serial.println("   - Auto-reconnect without confirmation");
+    Serial.println("   - Encrypted connection");
+    Serial.println("4. CLEAR ALL BONDS:");
+    Serial.println("   - Call clearBondedDevices() function");
+    Serial.println("========================================");
 }
 
 void BLEBikeManager::setRFIDManager(BikeRFIDManager* rfid) {
@@ -69,15 +71,19 @@ void BLEBikeManager::setRFIDManager(BikeRFIDManager* rfid) {
 }
 
 void BLEBikeManager::update() {
-    // Update boot button handling
-    updateBootButton();
-    
-    // Update connection state
-    if (connected && !secured) {
-        secured = true;
-        currentState = BIKE_STATE_SECURED;
-        Serial.println("Bike connection secured!");
+    // Minimal update - BLE Bonding handles everything automatically
+    // No need to check boot button during operation
+    // Bonding is managed by NimBLE stack
+}
+
+// Security Functions Implementation  
+bool BLEBikeManager::isRFIDAuthenticated() {
+    if (rfidManager == nullptr) {
+        return false;
     }
+    
+    // Check if authorized RFID card is present
+    return rfidManager->authenticateCard();
 }
 
 void BLEBikeManager::setupServer() {
@@ -132,6 +138,40 @@ void BLEBikeManager::setupAdvertising() {
     Serial.printf("Advertising setup for: %s\n", bikeName);
 }
 
+void BLEBikeManager::setupSecurity() {
+    Serial.println("Setting up BLE Security (Bonding)...");
+    
+    // Use RANDOM address for privacy (RPA - Resolvable Private Address)
+    NimBLEDevice::setOwnAddrType(BLE_OWN_ADDR_RANDOM);
+    
+    // Enable Secure Connections + MITM + Bonding
+    // setSecurityAuth(bond, mitm, sc)
+    NimBLEDevice::setSecurityAuth(
+        true,   // bonding: Save keys for auto-reconnection
+        true,   // mitm: Man-in-the-middle protection  
+        true    // sc: Secure Connections (BLE 4.2+)
+    );
+    
+    // I/O Capability: DISPLAY_YESNO
+    // - Display PIN on Serial
+    // - Require Yes/No confirmation via BOOT button or RFID
+    NimBLEDevice::setSecurityIOCap(BLE_HS_IO_DISPLAY_YESNO);
+    
+    // Key Distribution: LTK (encryption) + IRK (identity resolution)
+    NimBLEDevice::setSecurityInitKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
+    NimBLEDevice::setSecurityRespKey(BLE_SM_PAIR_KEY_DIST_ENC | BLE_SM_PAIR_KEY_DIST_ID);
+    
+    // Passkey not used for Just Works mode
+    NimBLEDevice::setSecurityPasskey(0);
+    
+    Serial.println("BLE Security configured:");
+    Serial.println("- Bonding: ENABLED (auto-reconnect)");
+    Serial.println("- MITM Protection: ENABLED");
+    Serial.println("- Secure Connections: ENABLED");
+    Serial.println("- I/O: Display + Yes/No (BOOT/RFID)");
+    Serial.println("- Privacy: Random Address (RPA)");
+}
+
 void BLEBikeManager::setPower() {
     NimBLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_DEFAULT);
     NimBLEDevice::setPower(ESP_PWR_LVL_P9, ESP_BLE_PWR_TYPE_ADV);
@@ -139,34 +179,28 @@ void BLEBikeManager::setPower() {
 }
 
 void BLEBikeManager::onConnect(BLEServer* pServer, ble_gap_conn_desc* param) {
-    Serial.println("=== BIKE CONNECTION REQUEST ===");
-    Serial.println("Device attempting to connect...");
+    Serial.println("========================================");
+    Serial.println("[BLE] Connection Request");
     
-    // Lấy địa chỉ của thiết bị đang kết nối
-    std::vector<uint16_t> connIds = pServer->getPeerDevices();
-    BLEAddress deviceAddress("");
-    bool deviceFound = false;
-    
-    if (!connIds.empty()) {
-        auto peerInfo = pServer->getPeerInfo(connIds[0]);
-        deviceAddress = peerInfo.getAddress();
-        deviceFound = true;
-        Serial.print("Connecting device: ");
-        Serial.println(deviceAddress.toString().c_str());
+    if (!param) {
+        Serial.println("[BLE] Error: No connection info");
+        return;
     }
     
-    // Kiểm tra xem thiết bị đã được bonded trước đó chưa
-    bool alreadyBonded = deviceFound && isDeviceBonded(deviceAddress);
+    // Delay để đảm bảo connection ổn định
+    delay(100);
     
-    if (alreadyBonded) {
-        // Thiết bị đã bonded - cho phép kết nối ngay lập tức
-        Serial.println("Device already bonded - AUTO ACCEPT connection!");
+    // Kiểm tra bonding status
+    if (param->sec_state.bonded) {
+        // Thiết bị đã bonded - tự động chấp nhận
+        Serial.println("[BLE] ✓ Device ALREADY BONDED - Auto-accept");
+        Serial.println("[BLE] Encrypted connection established");
+        
         connected = true;
         secured = true;
         currentState = BIKE_STATE_SECURED;
-        Serial.println("Bike connected successfully (auto-accepted)");
         
-        // Stop advertising sau khi kết nối
+        // Stop advertising
         if (pAdvertising->isAdvertising()) {
             pAdvertising->stop();
         }
@@ -177,7 +211,7 @@ void BLEBikeManager::onConnect(BLEServer* pServer, ble_gap_conn_desc* param) {
             
             // Set MTU
             int err = NimBLEDevice::setMTU(517);
-            Serial.printf("setMTU: %d\n", err);
+            Serial.printf("[BLE] MTU: %d\n", err);
 
             // Update connection parameters
             pServer->updateConnParams(param->conn_handle, 0x10, 0x20, 0, 400);
@@ -187,84 +221,26 @@ void BLEBikeManager::onConnect(BLEServer* pServer, ble_gap_conn_desc* param) {
                 bikeInfoService->notifyStatusChange(BIKE_ON);
             }
         }
+        
+        Serial.println("[BLE] Connected successfully (bonded device)");
     } else {
-        // Thiết bị mới - yêu cầu nhấn BOOT button
-        Serial.println("New device - BOOT BUTTON REQUIRED!");
+        // Thiết bị chưa bonded - bắt đầu pairing
+        Serial.println("[BLE] New device - Starting pairing...");
         
-        // Bắt đầu quá trình kiểm tra pairing
-        pairingInProgress = true;
-        pairingStartTime = millis();
+        uint16_t connHandle = param->conn_handle;
         
-        Serial.println("PRESS AND HOLD BOOT BUTTON OR SCAN RFID CARD to accept connection!");
-        Serial.println("You have 30 seconds...");
-        
-        // Đợi người dùng nhấn nút BOOT trong 30 giây
-        unsigned long startTime = millis();
-        bool accepted = false;
-        
-        while (millis() - startTime < PAIRING_TIMEOUT_MS) {
-            // Kiểm tra nút BOOT
-            if (digitalRead(MANUAL_AUTHENTICATION_PIN) == LOW) {
-                Serial.println("BOOT button pressed - CONNECTION ACCEPTED!");
-                accepted = true;
-                break;
-            }
-            
-            // Kiểm tra RFID card
-            if (isRFIDAuthenticated()) {
-                Serial.println("RFID card authenticated - CONNECTION ACCEPTED!");
-                accepted = true;
-                break;
-            }
-            
-            delay(100);
-        }
-        
-        pairingInProgress = false;
-        
-        if (accepted) {
-            connected = true;
-            secured = true;
-            currentState = BIKE_STATE_SECURED;
-            Serial.println("Bike connected successfully");
-            
-            // Lưu thiết bị mới
-            if (deviceFound) {
-                saveBondedDevice(deviceAddress);
-            }
-            
-            // Stop advertising sau khi kết nối
-            if (pAdvertising->isAdvertising()) {
-                pAdvertising->stop();
-            }
-            
-            // Set connection parameters
-            if (param->role) { // Slave role = 1
-                connectionParam = param;
-                
-                // Set MTU
-                int err = NimBLEDevice::setMTU(517);
-                Serial.printf("setMTU: %d\n", err);
-
-                // Update connection parameters
-                pServer->updateConnParams(param->conn_handle, 0x10, 0x20, 0, 400);
-                
-                // Notify bike status
-                if (bikeInfoService) {
-                    bikeInfoService->notifyStatusChange(BIKE_ON);
-                }
-            }
+        // Khởi tạo security/pairing process
+        if (NimBLEDevice::startSecurity(connHandle)) {
+            Serial.println("[BLE] Pairing request sent");
+            Serial.println("[BLE] Waiting for PIN confirmation...");
+            pairingInProgress = true;
+            pairingStartTime = millis();
         } else {
-            Serial.println("Timeout - CONNECTION REJECTED!");
-            
-            // Ngắt kết nối
-            for (uint16_t connId : connIds) {
-                pServer->disconnect(connId);
-            }
-            connected = false;
-            secured = false;
+            Serial.println("[BLE] Failed to start pairing - will retry");
         }
     }
+    
+    Serial.println("========================================");
 }
 
 void BLEBikeManager::onDisconnect(BLEServer* pServer, ble_gap_conn_desc* param) {
@@ -275,7 +251,7 @@ void BLEBikeManager::onDisconnect(BLEServer* pServer, ble_gap_conn_desc* param) 
         currentState = BIKE_STATE_IDLE;
         connectionParam = nullptr;
         
-        Serial.println("Bike disconnected");
+        Serial.println("[BLE] Device disconnected");
         
         // Notify bike status
         if (bikeInfoService) {
@@ -287,14 +263,102 @@ void BLEBikeManager::onDisconnect(BLEServer* pServer, ble_gap_conn_desc* param) 
     }
 }
 
-void BLEBikeManager::handleSecureConnection(BLEServer* pServer, ble_gap_conn_desc* param) {
-    // Simple connection without separate security manager
-    Serial.println("Direct connection - no separate security service");
+void BLEBikeManager::onAuthenticationComplete(ble_gap_conn_desc* desc) {
+    if (!desc) return;
+    
+    Serial.println("========================================");
+    if (desc->sec_state.bonded && desc->sec_state.encrypted) {
+        Serial.println("[BLE] ✓ PAIRING/BONDING SUCCESS");
+        Serial.println("[BLE] - Connection: BONDED");
+        Serial.println("[BLE] - Encryption: ENABLED");
+        
+        // Get peer address
+        NimBLEAddress peerAddr(desc->peer_ota_addr);
+        Serial.print("[BLE] - Peer Address: ");
+        Serial.println(peerAddr.toString().c_str());
+        Serial.println("[BLE] Device saved - next time will auto-connect");
+        
+        // Mark as connected and secured
+        connected = true;
+        secured = true;
+        currentState = BIKE_STATE_SECURED;
+        pairingInProgress = false;
+        
+        // Stop advertising
+        if (pAdvertising && pAdvertising->isAdvertising()) {
+            pAdvertising->stop();
+        }
+        
+        // Set connection parameters
+        if (desc->role) {
+            connectionParam = desc;
+            
+            // Set MTU
+            int err = NimBLEDevice::setMTU(517);
+            Serial.printf("[BLE] MTU: %d\n", err);
+
+            // Update connection parameters
+            pServer->updateConnParams(desc->conn_handle, 0x10, 0x20, 0, 400);
+            
+            // Notify bike status
+            if (bikeInfoService) {
+                bikeInfoService->notifyStatusChange(BIKE_ON);
+            }
+        }
+    } else {
+        Serial.println("[BLE] ✗ PAIRING FAILED");
+        Serial.println("[BLE] - Not bonded or encrypted");
+        pairingInProgress = false;
+    }
+    Serial.println("========================================");
 }
 
-void BLEBikeManager::handleDisconnection(BLEServer* pServer, ble_gap_conn_desc* param) {
-    // Handle cleanup
-    Serial.println("Connection cleanup");
+uint32_t BLEBikeManager::onPassKeyRequest() {
+    Serial.println("[BLE] PassKey request - not used for Yes/No mode");
+    return 0;
+}
+
+bool BLEBikeManager::onConfirmPIN(uint32_t pin) {
+    Serial.println("========================================");
+    Serial.println("[BLE] ⚠️  PAIRING CONFIRMATION REQUIRED!");
+    Serial.print("[BLE] PIN displayed: ");
+    Serial.println(pin);
+    Serial.println("[BLE] >> PRESS BOOT BUTTON to accept <<");
+    Serial.println("[BLE] >> OR SCAN RFID CARD to accept <<");
+    Serial.println("[BLE] Timeout: 10 seconds");
+    Serial.println("========================================");
+    
+    unsigned long startTime = millis();
+    bool accepted = false;
+    
+    while (millis() - startTime < 10000) {  // 10 second timeout
+        // Check BOOT button
+        if (digitalRead(MANUAL_AUTHENTICATION_PIN) == LOW) {
+            Serial.println("[BLE] ✓ BOOT button pressed - PAIRING ACCEPTED");
+            accepted = true;
+            
+            // Wait for button release
+            while (digitalRead(MANUAL_AUTHENTICATION_PIN) == LOW) {
+                delay(10);
+            }
+            break;
+        }
+        
+        // Check RFID authentication
+        if (isRFIDAuthenticated()) {
+            Serial.println("[BLE] ✓ RFID authenticated - PAIRING ACCEPTED");
+            accepted = true;
+            break;
+        }
+        
+        delay(100);
+    }
+    
+    if (!accepted) {
+        Serial.println("[BLE] ✗ Timeout - PAIRING REJECTED");
+    }
+    
+    return accepted;
 }
 
 bool BLEBikeManager::isConnected() {
@@ -340,11 +404,59 @@ BikeState BLEBikeManager::getBikeState() {
 }
 
 void BLEBikeManager::clearBondedDevices() {
-    clearBondedDevicesInternal();
+    Serial.println("========================================");
+    Serial.println("[BLE] Clearing ALL bonded devices...");
+    
+    // Sử dụng NimBLE API để xóa tất cả bonded devices
+    int count = ble_store_clear();
+    
+    Serial.printf("[BLE] Cleared %d bonded device(s)\n", count >= 0 ? count : 0);
+    Serial.println("[BLE] All bonding information deleted");
+    Serial.println("[BLE] Next connection will require pairing");
+    Serial.println("========================================");
 }
 
 uint8_t BLEBikeManager::getBondedDeviceCount() {
-    return preferences.getUChar("bond_count", 0);
+    return getBondedDevicesFromStack();
+}
+
+int BLEBikeManager::getBondedDevicesFromStack() {
+    // Get bonded device count from NimBLE stack
+    int count = 0;
+    ble_addr_t peer_id_addrs[MYNEWT_VAL(BLE_STORE_MAX_BONDS)];
+    int num_peers;
+    
+    // Get all bonded peer addresses
+    ble_store_util_bonded_peers(peer_id_addrs, &num_peers, MYNEWT_VAL(BLE_STORE_MAX_BONDS));
+    count = num_peers;
+    
+    return count;
+}
+
+void BLEBikeManager::printBondedDevices() {
+    Serial.println("========================================");
+    Serial.println("[BLE] Bonded Devices List:");
+    
+    ble_addr_t peer_id_addrs[MYNEWT_VAL(BLE_STORE_MAX_BONDS)];
+    int num_peers;
+    
+    // Get all bonded peer addresses
+    ble_store_util_bonded_peers(peer_id_addrs, &num_peers, MYNEWT_VAL(BLE_STORE_MAX_BONDS));
+    
+    if (num_peers == 0) {
+        Serial.println("  (No bonded devices)");
+    } else {
+        for (int i = 0; i < num_peers; i++) {
+            char addr_str[18];
+            sprintf(addr_str, "%02x:%02x:%02x:%02x:%02x:%02x",
+                    peer_id_addrs[i].val[5], peer_id_addrs[i].val[4],
+                    peer_id_addrs[i].val[3], peer_id_addrs[i].val[2],
+                    peer_id_addrs[i].val[1], peer_id_addrs[i].val[0]);
+            Serial.printf("  %d. %s\n", i + 1, addr_str);
+        }
+    }
+    Serial.printf("Total: %d bonded device(s)\n", num_peers);
+    Serial.println("========================================");
 }
 
 const char* BLEBikeManager::getBikeName() {
@@ -396,142 +508,4 @@ void BLEBikeManager::setConnectionPriority(bool isHigh) {
 // Security Functions Implementation
 bool BLEBikeManager::isBootButtonPressed() {
     return digitalRead(MANUAL_AUTHENTICATION_PIN) == LOW;
-}
-
-bool BLEBikeManager::isRFIDAuthenticated() {
-    if (rfidManager == nullptr) {
-        return false;
-    }
-    
-    // Check if authorized RFID card is present
-    return rfidManager->authenticateCard();
-}
-
-void BLEBikeManager::updateBootButton() {
-    static unsigned long bootButtonPressStart = 0;
-    unsigned long currentTime = millis();
-    
-    // Check boot button every 50ms to debounce
-    if (currentTime - lastBootButtonCheck > 50) {
-        bool buttonPressed = isBootButtonPressed();
-        
-        // Detect button press (falling edge)
-        if (buttonPressed && !bootButtonPressed) {
-            bootButtonPressStart = currentTime;
-        }
-        
-        // Detect button release (rising edge) - chỉ khi không đang pairing
-        if (!buttonPressed && bootButtonPressed && !pairingInProgress) {
-            unsigned long pressDuration = currentTime - bootButtonPressStart;
-            
-            if (pressDuration >= 5000) { // 5 seconds or more
-                Serial.println("Long press detected - Clearing all bonded devices");
-                clearBondedDevicesInternal();
-            }
-        }
-        
-        bootButtonPressed = buttonPressed;
-        lastBootButtonCheck = currentTime;
-    }
-}
-
-void BLEBikeManager::saveBondedDevice(BLEAddress address) {
-    // Check if device is already bonded
-    if (isDeviceBonded(address)) {
-        Serial.println("Device already bonded");
-        return;
-    }
-    
-    uint8_t bondCount = preferences.getUChar("bond_count", 0);
-    
-    if (bondCount < MAX_BONDED_DEVICES) {
-        // Add new device normally
-        String key = "bond_" + String(bondCount);
-        preferences.putString(key.c_str(), address.toString().c_str());
-        preferences.putUChar("bond_count", bondCount + 1);
-        
-        Serial.print("New device bonded: ");
-        Serial.println(address.toString().c_str());
-        Serial.print("Total bonded devices: ");
-        Serial.println(bondCount + 1);
-    } else {
-        // FIFO replacement: Remove oldest (bond_0) and shift all up
-        Serial.println("Maximum bonded devices reached - Replacing oldest device");
-        
-        // Get oldest device that will be removed
-        String oldestKey = "bond_0";
-        String oldestDevice = preferences.getString(oldestKey.c_str(), "");
-        Serial.printf("Removing oldest bonded device: %s\n", oldestDevice.c_str());
-        
-        // Shift all devices up (bond_1 -> bond_0, bond_2 -> bond_1, etc.)
-        for (uint8_t i = 0; i < MAX_BONDED_DEVICES - 1; i++) {
-            String currentKey = "bond_" + String(i + 1);
-            String targetKey = "bond_" + String(i);
-            String deviceAddress = preferences.getString(currentKey.c_str(), "");
-            
-            if (deviceAddress != "") {
-                preferences.putString(targetKey.c_str(), deviceAddress.c_str());
-            }
-        }
-        
-        // Add new device at the end
-        String newKey = "bond_" + String(MAX_BONDED_DEVICES - 1);
-        preferences.putString(newKey.c_str(), address.toString().c_str());
-        
-        Serial.printf("New device bonded (replaced oldest): %s\n", address.toString().c_str());
-        Serial.printf("Total bonded devices: %d (maintained)\n", MAX_BONDED_DEVICES);
-    }
-    
-    // Show updated bonded devices list
-    printBondedDevices();
-}
-
-bool BLEBikeManager::isDeviceBonded(BLEAddress address) {
-    uint8_t bondCount = preferences.getUChar("bond_count", 0);
-    
-    for (uint8_t i = 0; i < bondCount; i++) {
-        String key = "bond_" + String(i);
-        String bondedAddress = preferences.getString(key.c_str(), "");
-        
-        if (bondedAddress == address.toString().c_str()) {
-            return true;
-        }
-    }
-    
-    return false;
-}
-
-void BLEBikeManager::printBondedDevices() {
-    uint8_t bondCount = preferences.getUChar("bond_count", 0);
-    Serial.println("=== BONDED DEVICES LIST ===");
-    
-    if (bondCount == 0) {
-        Serial.println("No bonded devices");
-    } else {
-        for (uint8_t i = 0; i < bondCount; i++) {
-            String key = "bond_" + String(i);
-            String deviceAddress = preferences.getString(key.c_str(), "");
-            
-            if (deviceAddress != "") {
-                Serial.printf("%d. %s %s\n", i + 1, deviceAddress.c_str(), 
-                             (i == 0) ? "(oldest)" : (i == bondCount - 1) ? "(newest)" : "");
-            }
-        }
-    }
-    Serial.printf("Total: %d/%d devices\n", bondCount, MAX_BONDED_DEVICES);
-    Serial.println("==========================");
-}
-
-void BLEBikeManager::clearBondedDevicesInternal() {
-    preferences.clear();
-    Serial.println("=== ALL BONDED DEVICES CLEARED ===");
-    Serial.println("All previous pairings removed");
-    
-    // Disconnect current connection if any
-    if (connected && pServer) {
-        std::vector<uint16_t> connIds = pServer->getPeerDevices();
-        for (uint16_t connId : connIds) {
-            pServer->disconnect(connId);
-        }
-    }
 }

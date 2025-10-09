@@ -38,9 +38,12 @@ public:
     void setRFIDManager(BikeRFIDManager* rfid);  // Set RFID manager reference
     void update();
     
-    // BLE Server Callbacks (kế thừa từ BLESecurityManager)
+    // BLE Server Callbacks
     void onConnect(BLEServer* pServer, ble_gap_conn_desc* param) override;
     void onDisconnect(BLEServer* pServer, ble_gap_conn_desc* param) override;
+    void onAuthenticationComplete(ble_gap_conn_desc* desc) override;
+    uint32_t onPassKeyRequest() override;
+    bool onConfirmPIN(uint32_t pin) override;
     
     // Connection Management
     bool isConnected();
@@ -71,7 +74,6 @@ public:
 private:
     // Core components
     BLEServer* pServer;
-    // BLEService* pInfoService;
     BLEAdvertising* pAdvertising;
     
     // Custom components
@@ -83,11 +85,8 @@ private:
     BikeState currentState;
     ble_gap_conn_desc* connectionParam;
     
-    // Security management
-    Preferences preferences;
+    // Security management (simplified - no need to store MAC addresses)
     bool pairingInProgress;
-    bool bootButtonPressed;
-    unsigned long lastBootButtonCheck;
     unsigned long pairingStartTime;
     
     // RFID integration
@@ -97,20 +96,16 @@ private:
     void setupServer();
     void setupServices();
     void setupAdvertising();
+    void setupSecurity();
     void setPower();
     void setConnectionPriority(bool isHigh);
     
     // Security functions
     bool isBootButtonPressed();
     bool isRFIDAuthenticated();  // Check RFID authentication
-    void updateBootButton();
-    void saveBondedDevice(BLEAddress address);
-    bool isDeviceBonded(BLEAddress address);
-    void clearBondedDevicesInternal();
     
-    // Security integration
-    void handleSecureConnection(BLEServer* pServer, ble_gap_conn_desc* param);
-    void handleDisconnection(BLEServer* pServer, ble_gap_conn_desc* param);
+    // Bonding information retrieval (from NimBLE stack)
+    int getBondedDevicesFromStack();
 };
 
 #endif
