@@ -4,6 +4,7 @@
 #include <BikeDisplayUI.h>
 #include <BikeCANManager.h>
 #include "BikeDisplayHardware.h"
+#include <OneButton.h>
 
 // Khai báo TFT
 TFT_eSPI tft = TFT_eSPI();
@@ -23,12 +24,43 @@ BikeDisplayUI dashboard;
 // CAN Manager instance
 BikeCANManager canManager;
 
+// OneButton instance for theme switching
+OneButton themeButton(COS_PIN, true); // Active LOW
+
+// Theme switching state
+bool longPressCompleted = false;
+unsigned long lastLongPressEnd = 0;
+
 // Bike data - will be updated via CAN
 BikeDataDisplay bike;
 
 // CAN connection status
 bool canConnected = false;
 unsigned long lastCANMessage = 0;
+
+// OneButton callback functions
+void onThemeLongPressStart() {
+  Serial.println("[THEME] Long press started - waiting for release and double press");
+}
+
+void onThemeLongPressStop() {
+  longPressCompleted = true;
+  lastLongPressEnd = millis();
+  Serial.println("[THEME] Long press completed - waiting for quick press within 1 second");
+}
+
+void onThemeClick() {
+  // Check if this follows a long press within timeout
+  if (longPressCompleted && (millis() - lastLongPressEnd) < 1000) {
+    // Quick press within 1 second after long press - switch theme!
+    int currentTheme = dashboard.getCurrentTheme();
+    int newTheme = (currentTheme == 0) ? 1 : 0;
+    dashboard.setTheme(newTheme);
+    dashboard.flashScreen();
+    Serial.printf("[THEME] Theme switched to %d via long press + quick press sequence\n", newTheme);
+    longPressCompleted = false; // Reset
+  }
+}
 
 // LVGL flush callback
 void my_disp_flush(lv_disp_drv_t *disp, const lv_area_t *area, lv_color_t *color_p) {
@@ -127,6 +159,11 @@ void setup() {
   pinMode(COS_PIN, INPUT_PULLUP);
   Serial.println("✅ Passing button input configured (COS_PIN)");
   
+  // Setup OneButton callbacks for theme switching
+  themeButton.attachLongPressStart(onThemeLongPressStart);
+  themeButton.attachLongPressStop(onThemeLongPressStop);
+  themeButton.attachClick(onThemeClick);
+  
   // Khởi tạo LCD
   tft.init();
   tft.setRotation(1); // Landscape 480x272
@@ -204,6 +241,15 @@ void loop() {
   // Read passing button (active low)
   bool passingPressed = (digitalRead(COS_PIN) == LOW);
   bike.passingActive = passingPressed;
+  
+  // Update OneButton for theme switching
+  themeButton.tick();
+  
+  // Reset long press state if timeout expired
+  if (longPressCompleted && (millis() - lastLongPressEnd) >= 1000) {
+    longPressCompleted = false;
+    Serial.println("[THEME] Double press timeout - reset");
+  }
   
   // Cập nhật dashboard mỗi 100ms
   if(millis() - lastUpdate > 100) {

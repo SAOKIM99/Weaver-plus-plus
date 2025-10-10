@@ -4,21 +4,39 @@
 #include "font/orbitron_num_80.c"
 
 // Color themes - same as original
-#define CURRENT_THEME 0
 
-#if CURRENT_THEME == 0
-    // Theme 0: Minimalist Dark Theme (Original)
-    #define UI_COLOR_BG         lv_color_hex(0x000000)      // Pure black background
-    #define UI_COLOR_PANEL      lv_color_hex(0x1A1E23)      // Dark panel background
-    #define UI_COLOR_PRIMARY    lv_color_hex(0x2D3748)      // Primary elements
-    #define UI_COLOR_ACCENT     lv_color_hex(0x4A90E2)      // Blue accent
-    #define UI_COLOR_SUCCESS    lv_color_hex(0x48C785)      // Green for good values
-    #define UI_COLOR_WARNING    lv_color_hex(0xF7B731)      // Yellow for warnings
-    #define UI_COLOR_DANGER     lv_color_hex(0xE55039)      // Red for critical
-    #define UI_COLOR_TEXT_MAIN  lv_color_hex(0xF7F9FA)      // Main text color
-    #define UI_COLOR_TEXT_MUTED lv_color_hex(0x8C9AA6)      // Muted text
-    #define UI_COLOR_ARC_BG     lv_color_hex(0x1A1E23)      // Arc background
-#endif
+#define THEME_DARK 0
+#define THEME_LIGHT 1
+
+// Default theme
+static int CURRENT_THEME = THEME_DARK;
+
+// Theme 0: Minimalist Dark Theme (Original)
+#define UI_COLOR_BG_DARK         lv_color_hex(0x000000)
+#define UI_COLOR_PANEL_DARK      lv_color_hex(0x1A1E23)
+#define UI_COLOR_ACCENT_DARK     lv_color_hex(0x4A90E2)
+#define UI_COLOR_SUCCESS_DARK    lv_color_hex(0x48C785)
+#define UI_COLOR_WARNING_DARK    lv_color_hex(0xF7B731)
+#define UI_COLOR_DANGER_DARK     lv_color_hex(0xE55039)
+#define UI_COLOR_ARC_BG_DARK     lv_color_hex(0x1A1E23)
+
+// Theme 1: Light Theme (Dark mode: white bg, black text)
+#define UI_COLOR_BG_LIGHT         lv_color_hex(0xFFFFFF)
+#define UI_COLOR_PANEL_LIGHT      lv_color_hex(0xFFFFFF)
+#define UI_COLOR_ACCENT_LIGHT     lv_color_hex(0x000000)
+#define UI_COLOR_SUCCESS_LIGHT    lv_color_hex(0x000000)
+#define UI_COLOR_WARNING_LIGHT    lv_color_hex(0x000000)
+#define UI_COLOR_DANGER_LIGHT     lv_color_hex(0x000000)
+#define UI_COLOR_ARC_BG_LIGHT     lv_color_hex(0xFFFFFF)
+
+// Macros to get color by theme
+#define UI_COLOR_BG         (CURRENT_THEME == THEME_DARK ? UI_COLOR_BG_DARK : UI_COLOR_BG_LIGHT)
+#define UI_COLOR_PANEL      (CURRENT_THEME == THEME_DARK ? UI_COLOR_PANEL_DARK : UI_COLOR_PANEL_LIGHT)
+#define UI_COLOR_ACCENT     (CURRENT_THEME == THEME_DARK ? UI_COLOR_ACCENT_DARK : UI_COLOR_ACCENT_LIGHT)
+#define UI_COLOR_SUCCESS    (CURRENT_THEME == THEME_DARK ? UI_COLOR_SUCCESS_DARK : UI_COLOR_SUCCESS_LIGHT)
+#define UI_COLOR_WARNING    (CURRENT_THEME == THEME_DARK ? UI_COLOR_WARNING_DARK : UI_COLOR_WARNING_LIGHT)
+#define UI_COLOR_DANGER     (CURRENT_THEME == THEME_DARK ? UI_COLOR_DANGER_DARK : UI_COLOR_DANGER_LIGHT)
+#define UI_COLOR_ARC_BG     (CURRENT_THEME == THEME_DARK ? UI_COLOR_ARC_BG_DARK : UI_COLOR_ARC_BG_LIGHT)
 
 // Constructor
 BikeDisplayUI::BikeDisplayUI() {
@@ -714,7 +732,40 @@ void BikeDisplayUI::updateAll(const BikeDataDisplay& data) {
 
 // Theme setting (placeholder)
 void BikeDisplayUI::setTheme(int themeId) {
-  // Future implementation for different themes
+  // Đổi theme: 0 = dark, 1 = light
+  if (themeId == THEME_DARK || themeId == THEME_LIGHT) {
+    CURRENT_THEME = themeId;
+    // Cập nhật lại màu nền
+    if (ui_main_screen) {
+      lv_obj_set_style_bg_color(ui_main_screen, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+    // Có thể thêm logic cập nhật lại màu cho các thành phần khác nếu cần
+  }
+}
+
+// Get current theme
+int BikeDisplayUI::getCurrentTheme() {
+  return CURRENT_THEME;
+}
+
+// Flash screen effect for theme confirmation
+void BikeDisplayUI::flashScreen() {
+  if (!ui_main_screen) return;
+  
+  // Save current background color
+  lv_color_t originalColor = lv_obj_get_style_bg_color(ui_main_screen, LV_PART_MAIN);
+  
+  // Flash to white
+  lv_obj_set_style_bg_color(ui_main_screen, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+  
+  // Use a timer to revert after 200ms
+  lv_timer_t *flashTimer = lv_timer_create([](lv_timer_t *timer) {
+    BikeDisplayUI *ui = (BikeDisplayUI *)timer->user_data;
+    if (ui->ui_main_screen) {
+      lv_obj_set_style_bg_color(ui->ui_main_screen, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+    lv_timer_del(timer);
+  }, 200, this);
 }
 
 // Set speed range

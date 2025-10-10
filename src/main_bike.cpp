@@ -8,6 +8,7 @@
 #include "BikeSensorManager.h"
 #include "BikeCANManager.h"
 #include "BikeData.h"
+#include "BikeMainHardware.h"
 
 // Create instances
 BLEBikeManager bleManager;
@@ -325,7 +326,7 @@ void setup() {
     sensorManager.begin();
     
     Serial.println("\n🔗 4. Initializing CAN Bus...");
-    if (!canManager.begin()) {
+    if (!canManager.begin(MAIN_CAN_TX, MAIN_CAN_RX)) {
         Serial.println("⚠️  System will continue without CAN communication");
     }
     

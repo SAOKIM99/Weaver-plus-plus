@@ -302,6 +302,8 @@ public:
   
   // Theme and styling
   void setTheme(int themeId);
+  int getCurrentTheme();
+  void flashScreen();
   void setSpeedRange(int maxSpeed);
   void setCurrentRange(int maxCurrent);
   
