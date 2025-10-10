@@ -106,6 +106,8 @@ private:
     
     // Bonding information retrieval (from NimBLE stack)
     int getBondedDevicesFromStack();
+    void enforceMaxBondedDevices();  // Enforce MAX_BONDED_DEVICES limit
+    void removeOldestBondedDevice(); // Remove oldest bonded device
 };
 
 #endif

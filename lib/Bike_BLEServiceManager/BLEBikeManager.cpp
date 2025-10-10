@@ -278,6 +278,9 @@ void BLEBikeManager::onAuthenticationComplete(ble_gap_conn_desc* desc) {
         Serial.println(peerAddr.toString().c_str());
         Serial.println("[BLE] Device saved - next time will auto-connect");
         
+        // Enforce maximum bonded devices limit
+        enforceMaxBondedDevices();
+        
         // Mark as connected and secured
         connected = true;
         secured = true;
@@ -431,6 +434,54 @@ int BLEBikeManager::getBondedDevicesFromStack() {
     count = num_peers;
     
     return count;
+}
+
+void BLEBikeManager::enforceMaxBondedDevices() {
+    int bondedCount = getBondedDevicesFromStack();
+    
+    Serial.printf("[BLE] Current bonded devices: %d / %d\n", bondedCount, MAX_BONDED_DEVICES);
+    
+    // Remove oldest devices until we're at or below the limit
+    while (bondedCount > MAX_BONDED_DEVICES) {
+        Serial.println("[BLE] ⚠️  Bonded devices limit exceeded!");
+        Serial.println("[BLE] Removing oldest bonded device...");
+        
+        removeOldestBondedDevice();
+        
+        bondedCount = getBondedDevicesFromStack();
+        Serial.printf("[BLE] Remaining bonded devices: %d\n", bondedCount);
+    }
+}
+
+void BLEBikeManager::removeOldestBondedDevice() {
+    ble_addr_t peer_id_addrs[MYNEWT_VAL(BLE_STORE_MAX_BONDS)];
+    int num_peers;
+    
+    // Get all bonded peer addresses
+    ble_store_util_bonded_peers(peer_id_addrs, &num_peers, MYNEWT_VAL(BLE_STORE_MAX_BONDS));
+    
+    if (num_peers == 0) {
+        Serial.println("[BLE] No bonded devices to remove");
+        return;
+    }
+    
+    // Remove the first device (oldest in the list)
+    // NimBLE typically stores devices in order of bonding
+    ble_addr_t* oldest_addr = &peer_id_addrs[0];
+    
+    // Delete bonding information for this device
+    int rc = ble_store_util_delete_peer(oldest_addr);
+    
+    if (rc == 0) {
+        char addr_str[18];
+        sprintf(addr_str, "%02x:%02x:%02x:%02x:%02x:%02x",
+                oldest_addr->val[5], oldest_addr->val[4],
+                oldest_addr->val[3], oldest_addr->val[2],
+                oldest_addr->val[1], oldest_addr->val[0]);
+        Serial.printf("[BLE] ✓ Removed oldest device: %s\n", addr_str);
+    } else {
+        Serial.printf("[BLE] ✗ Failed to remove device (error: %d)\n", rc);
+    }
 }
 
 void BLEBikeManager::printBondedDevices() {

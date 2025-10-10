@@ -11,10 +11,6 @@ BikeCANManager::BikeCANManager() :
 BikeCANManager::~BikeCANManager() {
 }
 
-bool BikeCANManager::begin() {
-    return begin(CAN_TX_PIN, CAN_RX_PIN);
-}
-
 bool BikeCANManager::begin(int txPin, int rxPin) {
     Serial.println("=== CAN Manager Initialization ===");
     

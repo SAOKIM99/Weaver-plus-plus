@@ -3,6 +3,7 @@
 #include <lvgl.h>
 #include <BikeDisplayUI.h>
 #include <BikeCANManager.h>
+#include "BikeDisplayHardware.h"
 
 // Khai báo TFT
 TFT_eSPI tft = TFT_eSPI();
@@ -122,6 +123,9 @@ void setup() {
     Serial.println("❌ CAN Manager initialization failed");
     canConnected = false;
   }
+
+  pinMode(COS_PIN, INPUT_PULLUP);
+  Serial.println("✅ Passing button input configured (COS_PIN)");
   
   // Khởi tạo LCD
   tft.init();
@@ -182,6 +186,7 @@ void setup() {
   bike.bluetoothConnected = false;  // Khởi tạo Bluetooth disconnected
   bike.turnLeftActive = false;     // Khởi tạo turn indicators tắt
   bike.turnRightActive = false;
+  bike.passingActive = false;      // Khởi tạo passing indicator tắt
   
   Serial.println("🚴‍♂️ LVGL Electric Bike Dashboard with CAN Support initialized!");
   Serial.println("📡 Waiting for CAN messages from main controller...");
@@ -195,6 +200,10 @@ void loop() {
   
   // Check CAN connection status
   checkCANConnection();
+
+  // Read passing button (active low)
+  bool passingPressed = (digitalRead(COS_PIN) == LOW);
+  bike.passingActive = passingPressed;
   
   // Cập nhật dashboard mỗi 100ms
   if(millis() - lastUpdate > 100) {
@@ -202,12 +211,13 @@ void loop() {
     lastUpdate = millis();
     
     // Debug info với CAN status
-    Serial.printf("CAN:%s Speed:%.1f km/h Bat:%d%% Motor:%.1f°C BT:%s\n",
+    Serial.printf("CAN:%s Speed:%.1f km/h Bat:%d%% Motor:%.1f°C BT:%s PASS:%s\n",
                   canConnected ? "OK" : "LOST",
                   bike.speed,
                   bike.batteryPercent,
                   (float)bike.motorTemp,
-                  bike.bluetoothConnected ? "ON" : "OFF");
+                  bike.bluetoothConnected ? "ON" : "OFF",
+                  bike.passingActive ? "ON" : "OFF");
   }
   
   // Print CAN statistics every 10 seconds

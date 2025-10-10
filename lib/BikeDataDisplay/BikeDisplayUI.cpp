@@ -51,6 +51,7 @@ BikeDisplayUI::BikeDisplayUI() {
   ui_bluetooth_icon = NULL;
   ui_turn_left_icon = NULL;
   ui_turn_right_icon = NULL;
+  ui_passing_label = NULL;
   speed_font = NULL;
 }
 
@@ -80,6 +81,7 @@ bool BikeDisplayUI::initialize(lv_obj_t *parent_screen) {
   createOdometer();
   createBluetoothIcon();
   createTurnIndicators();
+  createPassingIndicator();
   
   return true;
 }
@@ -446,6 +448,15 @@ void BikeDisplayUI::createTurnIndicators() {
   lv_obj_align(ui_turn_right_icon, TURN_ICON_ALIGN, TURN_RIGHT_ICON_X, TURN_RIGHT_ICON_Y);
 }
 
+void BikeDisplayUI::createPassingIndicator() {
+  ui_passing_label = lv_label_create(ui_main_screen);
+  lv_label_set_text(ui_passing_label, PASSING_LABEL_TEXT);
+  lv_obj_set_style_text_font(ui_passing_label, PASSING_LABEL_FONT, LV_PART_MAIN);
+  lv_obj_set_style_text_color(ui_passing_label, UI_COLOR_BG, LV_PART_MAIN);
+  lv_obj_set_style_text_align(ui_passing_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+  lv_obj_align(ui_passing_label, PASSING_LABEL_ALIGN, PASSING_LABEL_X, PASSING_LABEL_Y);
+}
+
 // Update speed
 void BikeDisplayUI::updateSpeed(float speed) {
   if (!ui_speed_arc || !ui_speed_label) return;
@@ -679,6 +690,13 @@ void BikeDisplayUI::updateTurnIndicators(bool leftActive, bool rightActive) {
   }
 }
 
+void BikeDisplayUI::updatePassing(bool active) {
+  if (!ui_passing_label) return;
+  
+  lv_color_t color = active ? UI_COLOR_WARNING : UI_COLOR_BG;
+  lv_obj_set_style_text_color(ui_passing_label, color, LV_PART_MAIN | LV_STATE_DEFAULT);
+}
+
 // Update all data at once
 void BikeDisplayUI::updateAll(const BikeDataDisplay& data) {
   updateSpeed(data.speed);
@@ -691,6 +709,7 @@ void BikeDisplayUI::updateAll(const BikeDataDisplay& data) {
   updateOdometer(data.odometer);
   updateBluetooth(data.bluetoothConnected);
   updateTurnIndicators(data.turnLeftActive, data.turnRightActive);
+  updatePassing(data.passingActive);
 }
 
 // Theme setting (placeholder)

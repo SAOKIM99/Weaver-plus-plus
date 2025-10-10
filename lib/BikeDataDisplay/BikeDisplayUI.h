@@ -199,6 +199,13 @@
 #define TURN_ICON_FONT        &lv_font_montserrat_20
 #define TURN_ICON_TEXT_ALIGN  LV_TEXT_ALIGN_CENTER
 
+// Passing Indicator
+#define PASSING_LABEL_ALIGN   LV_ALIGN_TOP_RIGHT
+#define PASSING_LABEL_X       -20
+#define PASSING_LABEL_Y       60
+#define PASSING_LABEL_FONT    &lv_font_montserrat_20
+#define PASSING_LABEL_TEXT    LV_SYMBOL_EJECT
+
 
 // ================================================
 // BIKE DASHBOARD CLASS
@@ -251,6 +258,7 @@ private:
   // Turn indicators
   lv_obj_t *ui_turn_left_icon;
   lv_obj_t *ui_turn_right_icon;
+  lv_obj_t *ui_passing_label;
 
   // Font reference
   const lv_font_t* speed_font;
@@ -264,6 +272,7 @@ private:
   void createOdometer();
   void createBluetoothIcon();
   void createTurnIndicators();
+  void createPassingIndicator();
   lv_color_t getColorByTemperature(int temp, int lowThresh, int highThresh);
   lv_color_t getColorByPercent(int percent, int lowThresh, int highThresh);
 
@@ -286,6 +295,7 @@ public:
   void updateOdometer(float distance);
   void updateBluetooth(bool connected);
   void updateTurnIndicators(bool leftActive, bool rightActive);
+  void updatePassing(bool active);
   
   // Update method - all data at once
   void updateAll(const BikeDataDisplay& data);

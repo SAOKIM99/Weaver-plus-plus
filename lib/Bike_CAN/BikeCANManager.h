@@ -7,8 +7,6 @@
 #include "BikeMainHardware.h"
 
 // CAN Configuration
-#define CAN_TX_PIN    MAIN_CAN_TX
-#define CAN_RX_PIN    MAIN_CAN_RX
 #define CAN_SPEED     500E3  // 500 kbps
 
 // CAN Message IDs
@@ -41,7 +39,6 @@ public:
     ~BikeCANManager();
     
     // Initialization
-    bool begin();
     bool begin(int txPin, int rxPin); // Override pins for display board
     void update();
     

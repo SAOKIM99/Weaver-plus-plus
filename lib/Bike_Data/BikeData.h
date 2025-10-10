@@ -107,6 +107,7 @@ struct BikeDataDisplay {
   // Turn indicators
   bool turnLeftActive = false;    // Rẽ trái active
   bool turnRightActive = false;   // Rẽ phải active
+  bool passingActive = false;     // Nút passing (đèn pha nháy)
   // Motor data
   int motorTemp = 0;        // Nhiệt độ động cơ (°C)
   int ecuTemp = 0;          // Nhiệt độ ECU (°C)
@@ -213,6 +214,7 @@ inline BikeDataDisplay convertToDisplayData(const BikeStatus& status, bool bleCo
     // Signal data - use directly from BikeStatus
     displayData.turnLeftActive = status.leftSignal;
     displayData.turnRightActive = status.rightSignal;
+    displayData.passingActive = false;
     
     // External BLE connection
     displayData.bluetoothConnected = bleConnected;
