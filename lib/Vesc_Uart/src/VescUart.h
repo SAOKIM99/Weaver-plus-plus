@@ -13,7 +13,7 @@ class VescUart
 		float avgMotorCurrent;
 		float avgInputCurrent;
 		float dutyCycleNow;
-		float rpm;
+		float erpm;  // eRPM = Electrical RPM = actual RPM * total poles
 		float inpVoltage;
 		float ampHours;
 		float ampHoursCharged;
@@ -87,7 +87,7 @@ class VescUart
 
 		/**
 		 * @brief      Set the rpm of the motor
-		 * @param      rpm  - The desired RPM (actually eRPM = RPM * poles)
+		 * @param      rpm  - The desired eRPM (Electrical RPM = actual RPM * total poles)
 		 */
 		void setRPM(float rpm);
 

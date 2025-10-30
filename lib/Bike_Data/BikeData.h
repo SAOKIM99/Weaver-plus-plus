@@ -59,7 +59,7 @@ struct BMSData {
 };
 
 struct VESCData {
-    float motorRPM;
+    float motorERPM;      // eRPM = Electrical RPM = actual RPM * total poles (48 poles for 24 pole pairs)
     float inputVoltage;
     float motorCurrent;
     float inputCurrent;
@@ -104,6 +104,7 @@ struct BikeDataDisplay {
   float current = 0;
   bool isCharging = false;
   bool bluetoothConnected = false;  // Bluetooth connection status
+  bool parkingActive = false;       // Parking status (P indicator) - when brake is pressed
   // Turn indicators
   bool turnLeftActive = false;    // Rẽ trái active
   bool turnRightActive = false;   // Rẽ phải active
@@ -215,6 +216,7 @@ inline BikeDataDisplay convertToDisplayData(const BikeStatus& status, bool bleCo
     displayData.turnLeftActive = status.leftSignal;
     displayData.turnRightActive = status.rightSignal;
     displayData.passingActive = false;
+    displayData.parkingActive = status.brakePressed;  // Show P indicator when brake is pressed
     
     // External BLE connection
     displayData.bluetoothConnected = bleConnected;

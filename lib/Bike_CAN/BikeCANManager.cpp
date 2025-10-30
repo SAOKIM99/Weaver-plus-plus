@@ -64,10 +64,10 @@ bool BikeCANManager::sendBikeStatus(const BikeStatus& status, bool bikeUnlocked,
     if (!initialized) return false;
     
     CAN.beginPacket(MSG_ID_BIKE_STATUS);
-    CAN.write(status.operationState);           // Bike operation state
-    CAN.write(bikeUnlocked ? 1 : 0);            // Unlock status
-    CAN.write(bleConnected ? 1 : 0);            // BLE status
-    CAN.write((uint8_t)(status.bikeSpeed));     // Speed (km/h)
+    CAN.write(status.operationState);           // Byte 0: Bike operation state
+    CAN.write(bikeUnlocked ? 1 : 0);            // Byte 1: Unlock status
+    CAN.write(bleConnected ? 1 : 0);            // Byte 2: BLE status
+    CAN.write((uint8_t)(abs(status.bikeSpeed)));     // Byte 3: Speed (km/h)
     
     // Status flags byte (key, brake, charging, signals)
     uint8_t flags = 0;
@@ -76,11 +76,14 @@ bool BikeCANManager::sendBikeStatus(const BikeStatus& status, bool bikeUnlocked,
     if (status.bms1.isCharging || status.bms2.isCharging) flags |= 0x04;
     if (status.leftSignal) flags |= 0x08;
     if (status.rightSignal) flags |= 0x10;
-    CAN.write(flags);
+    CAN.write(flags);                          // Byte 4: Status flags
     
-    // Reserved bytes
-    CAN.write(0x00);
-    CAN.write(0x00);
+    // Motor current (2 bytes) - multiply by 100 to preserve 2 decimal places
+    int16_t motorCurrent = (int16_t)(status.vesc.motorCurrent * 100);
+    CAN.write(motorCurrent >> 8);              // Byte 5: Motor current MSB
+    CAN.write(motorCurrent & 0xFF);            // Byte 6: Motor current LSB
+    
+    CAN.write(0x00);                           // Byte 7: Reserved
     
     if (CAN.endPacket()) {
         messagesSent++;
@@ -151,8 +154,8 @@ bool BikeCANManager::sendVESCData(const VESCData& vesc) {
     
     CAN.beginPacket(MSG_ID_VESC_DATA);
     
-    // Motor RPM (2 bytes) - divide by 10 to fit in 16-bit
-    int16_t rpm = (int16_t)(vesc.motorRPM / 10);
+    // Motor eRPM (2 bytes) - divide by 10 to fit in 16-bit
+    int16_t rpm = (int16_t)(vesc.motorERPM / 10);
     CAN.write(rpm >> 8);
     CAN.write(rpm & 0xFF);
     
@@ -188,33 +191,41 @@ void BikeCANManager::sendNextInSequence(const SharedBikeData& sharedData) {
     // Convert to display data for additional info
     BikeDataDisplay displayData = convertToDisplayData(sharedData.sensorData, sharedData.bleConnected);
     
-    switch (sendSequence % CAN_MSG_COUNT) {
-        case CAN_MSG_BIKE_STATUS:
+    // 3-message cycle with priority:
+    // 0: BIKE_STATUS (high priority - real-time)
+    // 1: VESC_DATA (high priority - real-time)
+    // 2: LOW_PRIORITY (rotate through BMS1, BMS2, BATTERY_EXT, DISTANCE, TIME)
+    
+    uint8_t cyclePosition = sendSequence % 3;
+    uint8_t lowPriorityIndex = (sendSequence / 3) % 5;  // 5 low priority messages
+    
+    switch (cyclePosition) {
+        case 0:  // BIKE_STATUS - every 300ms (sent every cycle at position 0)
             success = sendBikeStatus(sharedData.sensorData, sharedData.bikeUnlocked, sharedData.bleConnected);
             break;
             
-        case CAN_MSG_BMS1_DATA:
-            success = sendBMSData(sharedData.sensorData.bms1, 1);
-            break;
-            
-        case CAN_MSG_BMS2_DATA:
-            success = sendBMSData(sharedData.sensorData.bms2, 2);
-            break;
-            
-        case CAN_MSG_VESC_DATA:
+        case 1:  // VESC_DATA - every 300ms (sent every cycle at position 1)
             success = sendVESCData(sharedData.sensorData.vesc);
             break;
             
-        case CAN_MSG_BATTERY_EXT:
-            success = sendBatteryExtended(sharedData.sensorData.bms1, sharedData.sensorData.bms2);
-            break;
-            
-        case CAN_MSG_DISTANCE_DATA:
-            success = sendDistanceData(displayData.odometer, displayData.distance, displayData.tripDistance);
-            break;
-            
-        case CAN_MSG_TIME_DATA:
-            success = sendTimeData(displayData.time);
+        case 2:  // LOW PRIORITY - rotate every 300ms
+            switch (lowPriorityIndex) {
+                case 0:  // BMS1
+                    success = sendBMSData(sharedData.sensorData.bms1, 1);
+                    break;
+                case 1:  // BMS2
+                    success = sendBMSData(sharedData.sensorData.bms2, 2);
+                    break;
+                case 2:  // BATTERY_EXT
+                    success = sendBatteryExtended(sharedData.sensorData.bms1, sharedData.sensorData.bms2);
+                    break;
+                case 3:  // DISTANCE_DATA
+                    success = sendDistanceData(displayData.odometer, displayData.distance, displayData.tripDistance);
+                    break;
+                case 4:  // TIME_DATA
+                    success = sendTimeData(displayData.time);
+                    break;
+            }
             break;
     }
     
@@ -351,16 +362,11 @@ bool BikeCANManager::sendTimeData(int time) {
 bool BikeCANManager::parseBikeStatus(uint8_t* data, uint8_t length, BikeStatus& status, bool& bikeUnlocked, bool& bleConnected) {
     if (!data || length < 7) return false;
     
-    // Debug raw data (disabled)
-    // Serial.printf("🔍 [parseBikeStatus] Raw: [%d][%d][%d][%d][%d]\n", data[0], data[1], data[2], data[3], data[4]);
-    
+    // Parse basic bike status (bytes 0-4)
     status.operationState = (BikeOperationState)data[0];
     bikeUnlocked = (data[1] == 1);
     bleConnected = (data[2] == 1);
     status.bikeSpeed = (float)data[3];
-    
-    // Debug parsed data (disabled)
-    // Serial.printf("🔍 [parseBikeStatus] BLE: %s, Speed: %.0f\n", bleConnected ? "ON" : "OFF", status.bikeSpeed);
     
     // Parse status flags
     uint8_t flags = data[4];
@@ -369,6 +375,12 @@ bool BikeCANManager::parseBikeStatus(uint8_t* data, uint8_t length, BikeStatus& 
     // Charging status is in flags but will be parsed from BMS data
     status.leftSignal = (flags & 0x08) != 0;
     status.rightSignal = (flags & 0x10) != 0;
+    
+    // Parse motor current (2 bytes at offset 5-6) if available
+    if (length >= 7) {
+        int16_t motorCurrent = (data[5] << 8) | data[6];
+        status.vesc.motorCurrent = motorCurrent / 100.0f;
+    }
     
     return true;
 }
@@ -407,9 +419,9 @@ bool BikeCANManager::parseBMSData(uint8_t* data, uint8_t length, BMSData& bms) {
 bool BikeCANManager::parseVESCData(uint8_t* data, uint8_t length, VESCData& vesc) {
     if (!data || length < 8) return false;
     
-    // Motor RPM (2 bytes, multiply by 10 to restore)
+    // Motor eRPM (2 bytes, multiply by 10 to restore)
     int16_t rpm = (data[0] << 8) | data[1];
-    vesc.motorRPM = rpm * 10.0f;
+    vesc.motorERPM = rpm * 10.0f;
     
     // Input voltage (2 bytes)
     uint16_t voltage = (data[2] << 8) | data[3];
@@ -424,6 +436,9 @@ bool BikeCANManager::parseVESCData(uint8_t* data, uint8_t length, VESCData& vesc
     vesc.tempFET = (float)data[7] - 50.0f;
     
     vesc.connected = true; // If we receive data, assume connected
+
+    // Serial.printf("🔍 [parseVESCData] RPM: %.0f, Volt: %.2fV, Curr: %.2fA, TempM: %.1f°C, TempFET: %.1f°C\n",
+    //               vesc.motorERPM, vesc.inputVoltage, vesc.motorCurrent, vesc.tempMotor, vesc.tempFET);
     
     return true;
 }
@@ -507,6 +522,8 @@ bool BikeCANManager::parseCANMessage(uint32_t id, uint8_t* data, uint8_t length,
                 displayData.bluetoothConnected = bleConnected;
                 displayData.turnLeftActive = tempStatus.leftSignal;
                 displayData.turnRightActive = tempStatus.rightSignal;
+                displayData.parkingActive = tempStatus.brakePressed;
+                displayData.motorCurrent = tempStatus.vesc.motorCurrent;  // Get motor current from BIKE_STATUS
             }
             break;
         }
@@ -519,7 +536,7 @@ bool BikeCANManager::parseCANMessage(uint32_t id, uint8_t* data, uint8_t length,
                 displayData.battery1Percent = tempBMS.soc;
                 displayData.battery1Temp = (int)tempBMS.temperature;
                 displayData.battery1Current = tempBMS.current;
-                displayData.isCharging = tempBMS.isCharging;
+                // displayData.isCharging = tempBMS.isCharging;
                 
                 // Debug: Log BMS1 temperature (simplified)
                 // Serial.printf("🌡️ [CAN-BMS1] %.1f°C\n", tempBMS.temperature);
@@ -535,7 +552,7 @@ bool BikeCANManager::parseCANMessage(uint32_t id, uint8_t* data, uint8_t length,
                 displayData.battery2Percent = tempBMS.soc;
                 displayData.battery2Temp = (int)tempBMS.temperature;
                 displayData.battery2Current = tempBMS.current;
-                if (tempBMS.isCharging) displayData.isCharging = true;
+                // if (tempBMS.isCharging) displayData.isCharging = true;
                 
                 // Debug: Log BMS2 temperature (simplified)
                 // Serial.printf("🌡️ [CAN-BMS2] %.1f°C\n", tempBMS.temperature);
@@ -594,7 +611,21 @@ bool BikeCANManager::parseCANMessage(uint32_t id, uint8_t* data, uint8_t length,
         displayData.batteryPercent = (displayData.battery1Percent + displayData.battery2Percent) / 2;
         displayData.batteryVoltage = (displayData.battery1Volt + displayData.battery2Volt) / 2.0f;
         displayData.voltage = displayData.batteryVoltage;
-        displayData.current = (displayData.battery1Current + displayData.battery2Current) / 2.0f;
+
+        float totalCurrent = displayData.battery1Current + displayData.battery2Current;
+        // Determine current source based on speed
+        // If speed < 0.5 km/h (parking mode): use BMS total current (shows charging/discharging)
+        // If speed >= 0.5 km/h (moving): use motor current (shows motor draw/regeneration)
+
+        if (displayData.speed < 0.5f && displayData.parkingActive) {
+            // Parking mode: show battery current
+            displayData.current = totalCurrent;
+            displayData.isCharging = (totalCurrent > 0.4f);
+        } else {
+            // Moving mode: show motor current
+            displayData.current = displayData.motorCurrent;
+            displayData.isCharging = (displayData.motorCurrent < -0.4f);
+        }
     }
     
     return success;

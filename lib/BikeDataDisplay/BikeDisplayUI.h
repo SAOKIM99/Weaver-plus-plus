@@ -188,6 +188,15 @@
 #define BLUETOOTH_ICON_FONT   &lv_font_montserrat_20
 #define BLUETOOTH_ICON_TEXT_ALIGN LV_TEXT_ALIGN_CENTER
 
+// Parking Icon (P indicator - next to Bluetooth)
+#define PARKING_ICON_X        160
+#define PARKING_ICON_Y        7
+#define PARKING_ICON_WIDTH    LV_SIZE_CONTENT
+#define PARKING_ICON_HEIGHT   LV_SIZE_CONTENT
+#define PARKING_ICON_ALIGN    LV_ALIGN_TOP_MID
+#define PARKING_ICON_FONT     &lv_font_montserrat_20
+#define PARKING_ICON_TEXT_ALIGN LV_TEXT_ALIGN_CENTER
+
 // Turn Indicators (Left & Right of Battery %)
 #define TURN_LEFT_ICON_X      -50    // Bên trái battery %
 #define TURN_LEFT_ICON_Y      7      // Cùng height với battery %
@@ -200,9 +209,9 @@
 #define TURN_ICON_TEXT_ALIGN  LV_TEXT_ALIGN_CENTER
 
 // Passing Indicator
-#define PASSING_LABEL_ALIGN   LV_ALIGN_TOP_RIGHT
-#define PASSING_LABEL_X       -20
-#define PASSING_LABEL_Y       60
+#define PASSING_LABEL_ALIGN   LV_TEXT_ALIGN_CENTER
+#define PASSING_LABEL_X       130
+#define PASSING_LABEL_Y       7
 #define PASSING_LABEL_FONT    &lv_font_montserrat_20
 #define PASSING_LABEL_TEXT    LV_SYMBOL_EJECT
 
@@ -216,9 +225,10 @@ private:
   lv_obj_t *ui_main_screen;
   lv_obj_t *ui_speed_arc;
   lv_obj_t *ui_speed_label;
+  lv_obj_t *ui_speed_unit_label;    // "Km/h" label
   lv_obj_t *ui_battery_text;
   lv_obj_t *ui_current_text;
-  lv_obj_t *ui_current_label;
+  lv_obj_t *ui_current_label;       // "A" label
   lv_obj_t *ui_current_arc;
   
   // Temperature displays 
@@ -255,6 +265,9 @@ private:
   // Bluetooth icon
   lv_obj_t *ui_bluetooth_icon;
 
+  // Parking icon
+  lv_obj_t *ui_parking_icon;
+
   // Turn indicators
   lv_obj_t *ui_turn_left_icon;
   lv_obj_t *ui_turn_right_icon;
@@ -262,6 +275,15 @@ private:
 
   // Font reference
   const lv_font_t* speed_font;
+
+  // Animation tracking
+  float currentSpeedValue = 0.0f;
+  float targetSpeedValue = 0.0f;
+  float currentCurrentValue = 0.0f;
+  float targetCurrentValue = 0.0f;
+  bool isChargingFlag = false;  // Flag để track trạng thái charging trong animation
+  lv_timer_t *speedAnimationTimer = NULL;
+  lv_timer_t *currentAnimationTimer = NULL;
 
   // Helper methods
   void createSpeedometer();
@@ -271,6 +293,7 @@ private:
   void createMotorDisplay();
   void createOdometer();
   void createBluetoothIcon();
+  void createParkingIcon();
   void createTurnIndicators();
   void createPassingIndicator();
   lv_color_t getColorByTemperature(int temp, int lowThresh, int highThresh);
@@ -286,7 +309,7 @@ public:
   
   // Update methods - individual components
   void updateSpeed(float speed);
-  void updateCurrent(float current);
+  void updateCurrent(float current, bool isCharging);
   void updateBattery(int percent);
   void updateECU(int temperature);
   void updateMotor(int temperature, float current);
@@ -294,6 +317,7 @@ public:
   void updateBattery2(float volt, int percent, uint16_t diffVoltMv, int temp, float current);
   void updateOdometer(float distance);
   void updateBluetooth(bool connected);
+  void updateParking(bool parking);
   void updateTurnIndicators(bool leftActive, bool rightActive);
   void updatePassing(bool active);
   

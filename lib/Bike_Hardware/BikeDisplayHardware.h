@@ -10,7 +10,7 @@
 #define CAN_RX_PIN    26
 
 // COS Pin (Cosine/Encoder Input)
-#define COS_PIN       34
+#define COS_PIN       34 // Active HIGH input for passing signal
 
 // ================================================
 // DISPLAY PINS (TFT_eSPI Configuration)

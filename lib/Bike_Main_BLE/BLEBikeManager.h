@@ -16,8 +16,9 @@ class BikeRFIDManager;
 #define MAX_BONDED_DEVICES 5      // Maximum number of bonded devices
 
 // Service UUIDs for Bike System
-#define BIKE_INFO_SERVICE_UUID      "12345678-1234-1234-1234-123456789abc"
-#define BIKE_CONTROL_SERVICE_UUID   "87654321-4321-4321-4321-cba987654321"
+#define BIKE_ADV_UUID      "0b479fd9-08f0-492c-8fd7-cd18fdb137cb"
+// #define BIKE_INFO_SERVICE_UUID      "12345678-1234-1234-1234-123456789abc"
+// #define BIKE_CONTROL_SERVICE_UUID   "87654321-4321-4321-4321-cba987654321"
 
 // Bike States
 enum BikeState {

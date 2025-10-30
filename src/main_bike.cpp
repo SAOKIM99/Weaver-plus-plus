@@ -196,18 +196,19 @@ void canTask(void *parameter) {
     Serial.println("[CAN_TASK] Started");
     
     while (true) {
-        // Send data in sequence every 500ms
-        if (xSemaphoreTake(bikeDataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            // Use library's automatic sequence sending
+        // Try to get mutex with short timeout (don't block watchdog)
+        if (xSemaphoreTake(bikeDataMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+            // Send data in sequence
             canManager.sendNextInSequence(sharedData);
             xSemaphoreGive(bikeDataMutex);
         }
+        // If can't get mutex, skip this send (don't wait, to avoid watchdog timeout)
         
-        // Handle incoming messages
+        // Handle incoming messages (non-blocking)
         canManager.update();
         
         // CAN task runs at 2Hz (500ms interval)
-        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(500));
+        vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(200));
     }
 }
 
@@ -218,61 +219,65 @@ void displayTask(void *parameter) {
     Serial.println("[DISPLAY_TASK] Started");
     
     while (true) {
-        // Display system status every 5 seconds
-        if (xSemaphoreTake(bikeDataMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-            Serial.println("\n=== 🚲 SMART BIKE SYSTEM STATUS ===");
-            
-            // BLE Status
-            Serial.printf("📡 BLE: %s", sharedData.bleConnected ? "Connected" : "Disconnected");
-            if (bleManager.isPairingInProgress()) {
-                Serial.print(" (PAIRING - PRESS BOOT!)");
-            }
-            Serial.printf(" | Bonded: %d\n", bleManager.getBondedDeviceCount());
-            
-            // RFID & Bike Status  
-            Serial.printf("🔐 Bike: %s | Key Output: %s\n", 
-                         sharedData.bikeUnlocked ? "UNLOCKED" : "LOCKED",
-                         sharedData.sensorData.keyOn ? "HIGH" : "LOW");
-            
-            // Speed & Hall Status
-            Serial.printf("🏁 Speed: %.1f km/h | Hall: %.1f Hz | Pulses: %lu\n",
-                         sharedData.sensorData.bikeSpeed,
-                         sharedData.sensorData.hallFrequency,
-                         sensorManager.getHallPulseCount());
-            
-            // BMS Status
-            Serial.printf("🔋 BMS1: %s", sharedData.sensorData.bms1.connected ? "OK" : "FAIL");
-            if (sharedData.sensorData.bms1.connected) {
-                Serial.printf(" %.2fV %.1fA %d%% %.1f°C Δ%dmV", 
-                             sharedData.sensorData.bms1.voltage, sharedData.sensorData.bms1.current, 
-                             sharedData.sensorData.bms1.soc, sharedData.sensorData.bms1.temperature,
-                             sharedData.sensorData.bms1.cellVoltageDelta);
-            }
-            Serial.println();
-            
-            Serial.printf("🔋 BMS2: %s", sharedData.sensorData.bms2.connected ? "OK" : "FAIL");
-            if (sharedData.sensorData.bms2.connected) {
-                Serial.printf(" %.2fV %.1fA %d%% %.1f°C Δ%dmV", 
-                             sharedData.sensorData.bms2.voltage, sharedData.sensorData.bms2.current, 
-                             sharedData.sensorData.bms2.soc, sharedData.sensorData.bms2.temperature,
-                             sharedData.sensorData.bms2.cellVoltageDelta);
-            }
-            Serial.println();
-            
-            // Task Status
-            Serial.printf("⚙️  Tasks: BLE=%d RFID=%d SENSOR=%d SYSTEM=%d CAN=%d DISPLAY=%d\n",
-                         uxTaskPriorityGet(bleTaskHandle),
-                         uxTaskPriorityGet(rfidTaskHandle), 
-                         uxTaskPriorityGet(sensorTaskHandle),
-                         uxTaskPriorityGet(systemTaskHandle),
-                         uxTaskPriorityGet(canTaskHandle),
-                         uxTaskPriorityGet(displayTaskHandle));
-                         
-            Serial.printf("💾 Free Heap: %d bytes\n", ESP.getFreeHeap());
-            Serial.println("=====================================");
-            
-            xSemaphoreGive(bikeDataMutex);
+        // Copy data with minimal mutex lock time (to avoid blocking CANTask watchdog)
+        SharedBikeData localData;
+        if (xSemaphoreTake(bikeDataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+            memcpy(&localData, &sharedData, sizeof(SharedBikeData));  // Fast copy
+            xSemaphoreGive(bikeDataMutex);  // Release immediately
+        } else {
+            vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(5000));
+            continue;  // Skip this cycle if can't get mutex
         }
+        
+        // Print outside mutex (non-critical, can take time)
+        Serial.println("\n=== 🚲 SMART BIKE SYSTEM STATUS ===");
+        
+        // BLE Status
+        Serial.printf("📡 BLE: %s", localData.bleConnected ? "Connected" : "Disconnected");
+        if (bleManager.isPairingInProgress()) {
+            Serial.print(" (PAIRING - PRESS BOOT!)");
+        }
+        Serial.printf(" | Bonded: %d\n", bleManager.getBondedDeviceCount());
+        
+        // RFID & Bike Status  
+        Serial.printf("🔐 Bike: %s | Key Output: %s\n", 
+                     localData.bikeUnlocked ? "UNLOCKED" : "LOCKED",
+                     localData.sensorData.keyOn ? "HIGH" : "LOW");
+        
+        // Speed Status
+        Serial.printf("🏁 Speed: %.1f km/h\n",
+                     localData.sensorData.bikeSpeed);
+        
+        // BMS Status
+        Serial.printf("🔋 BMS1: %s", localData.sensorData.bms1.connected ? "OK" : "FAIL");
+        if (localData.sensorData.bms1.connected) {
+            Serial.printf(" %.2fV %.1fA %d%% %.1f°C Δ%dmV", 
+                         localData.sensorData.bms1.voltage, localData.sensorData.bms1.current, 
+                         localData.sensorData.bms1.soc, localData.sensorData.bms1.temperature,
+                         localData.sensorData.bms1.cellVoltageDelta);
+        }
+        Serial.println();
+        
+        Serial.printf("🔋 BMS2: %s", localData.sensorData.bms2.connected ? "OK" : "FAIL");
+        if (localData.sensorData.bms2.connected) {
+            Serial.printf(" %.2fV %.1fA %d%% %.1f°C Δ%dmV", 
+                         localData.sensorData.bms2.voltage, localData.sensorData.bms2.current, 
+                         localData.sensorData.bms2.soc, localData.sensorData.bms2.temperature,
+                         localData.sensorData.bms2.cellVoltageDelta);
+        }
+        Serial.println();
+        
+        // Task Status
+        Serial.printf("⚙️  Tasks: BLE=%d RFID=%d SENSOR=%d SYSTEM=%d CAN=%d DISPLAY=%d\n",
+                     uxTaskPriorityGet(bleTaskHandle),
+                     uxTaskPriorityGet(rfidTaskHandle), 
+                     uxTaskPriorityGet(sensorTaskHandle),
+                     uxTaskPriorityGet(systemTaskHandle),
+                     uxTaskPriorityGet(canTaskHandle),
+                     uxTaskPriorityGet(displayTaskHandle));
+                     
+        Serial.printf("💾 Free Heap: %d bytes\n", ESP.getFreeHeap());
+        Serial.println("=====================================");
         
         // Low frequency for display updates
         vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(5000)); // Every 5 seconds
@@ -383,15 +388,15 @@ void setup() {
         0                  // Core 0 (same as Display)
     );
     
-    xTaskCreatePinnedToCore(
-        displayTask,       // Task function
-        "DisplayTask",     // Task name
-        3072,              // Stack size
-        NULL,              // Parameters
-        1,                 // Priority (Low)
-        &displayTaskHandle,// Task handle
-        0                  // Core 0
-    );
+    // xTaskCreatePinnedToCore(
+    //     displayTask,       // Task function
+    //     "DisplayTask",     // Task name
+    //     3072,              // Stack size
+    //     NULL,              // Parameters
+    //     1,                 // Priority (Low)
+    //     &displayTaskHandle,// Task handle
+    //     0                  // Core 0
+    // );
     
     Serial.println("\n✅ === RTOS SYSTEM READY ===");
     Serial.println("📋 Task Distribution:");

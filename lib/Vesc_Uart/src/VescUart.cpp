@@ -196,7 +196,7 @@ bool VescUart::processReadPacket(uint8_t * message) {
 			ind += 4; // Skip 4 bytes - mc_interface_read_reset_avg_id()
 			ind += 4; // Skip 4 bytes - mc_interface_read_reset_avg_iq()
 			data.dutyCycleNow 		= buffer_get_float16(message, 1000.0, &ind); 	// 2 bytes - mc_interface_get_duty_cycle_now()
-			data.rpm 				= buffer_get_float32(message, 1.0, &ind);		// 4 bytes - mc_interface_get_rpm()
+			data.erpm 				= buffer_get_float32(message, 1.0, &ind);		// 4 bytes - mc_interface_get_rpm() (actually eRPM)
 			data.inpVoltage 		= buffer_get_float16(message, 10.0, &ind);		// 2 bytes - GET_INPUT_VOLTAGE()
 			data.ampHours 			= buffer_get_float32(message, 10000.0, &ind);	// 4 bytes - mc_interface_get_amp_hours(false)
 			data.ampHoursCharged 	= buffer_get_float32(message, 10000.0, &ind);	// 4 bytes - mc_interface_get_amp_hours_charged(false)
@@ -334,7 +334,7 @@ void VescUart::printVescValues() {
 		debugPort->print("avgMotorCurrent: "); 	debugPort->println(data.avgMotorCurrent);
 		debugPort->print("avgInputCurrent: "); 	debugPort->println(data.avgInputCurrent);
 		debugPort->print("dutyCycleNow: "); 	debugPort->println(data.dutyCycleNow);
-		debugPort->print("rpm: "); 				debugPort->println(data.rpm);
+		debugPort->print("erpm: "); 			debugPort->println(data.erpm);
 		debugPort->print("inputVoltage: "); 	debugPort->println(data.inpVoltage);
 		debugPort->print("ampHours: "); 		debugPort->println(data.ampHours);
 		debugPort->print("ampHoursCharged: "); 	debugPort->println(data.ampHoursCharged);

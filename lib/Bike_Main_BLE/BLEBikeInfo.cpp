@@ -1,20 +1,26 @@
 #include "BLEBikeInfo.h"
+#include <esp_ota_ops.h>
+#include <esp_partition.h>
 
 BLEBikeInfo::BLEBikeInfo(BLEService* service) : 
-    BLEServiceManager(service), currentStatus(BIKE_OFF) {
-    
-    // Add characteristics với bảo mật
-    addReadWrite(BIKE_NAME_CHAR_UUID, 
-        authed([this](BLECharacteristic* p) { onReadName(p); }), 
-        authed([this](BLECharacteristic* p) { onWriteName(p); }));
-
+    BLEServiceManager(service), currentStatus(BIKE_OFF), otaHandler(0), packageCounter(0) {
     addReadWrite(BIKE_HARDWARE_CHAR_UUID, 
         authed([this](BLECharacteristic* p) { onReadHardware(p); }), 
         authed([this](BLECharacteristic* p) { onWriteHardware(p); }));
 
+    addReadWrite(BIKE_OTA_CHAR_UUID,
+        authed([this](BLECharacteristic* p) {onReadOTA(p);}),
+        authed([this](BLECharacteristic* p) {onWriteOTA(p);}), true);
+    
+    addReadWrite(BIKE_NAME_CHAR_UUID, 
+        authed([this](BLECharacteristic* p) { onReadName(p); }), 
+        authed([this](BLECharacteristic* p) { onWriteName(p); }));
+
     addReadWrite(BIKE_STATUS_CHAR_UUID, 
         authed([this](BLECharacteristic* p) { onReadStatus(p); }), 
         NULL, true); // Chỉ read và notify
+        
+    
 }
 
 void BLEBikeInfo::begin() {
@@ -61,6 +67,84 @@ void BLEBikeInfo::notifyStatusChange(BikeOperationState status) {
         pChar->setValue(&statusValue, sizeof(statusValue));
         pChar->notify();
     }
+}
+
+
+void BLEBikeInfo::onReadOTA(BLECharacteristic* pChar) {
+	pChar->setValue(String(BIKE_VERSION));
+}
+
+void BLEBikeInfo::onWriteOTA(BLECharacteristic* pChar) {
+  // OTA save on esp_ota
+  std::string rxData = pChar->getValue();
+  if (rxData == UPDATE_START_MSG) {
+    setOTA();
+    Serial.println("Begin OTA");
+    const esp_partition_t* partition = esp_ota_get_next_update_partition(NULL);
+    Serial.println("Found partition");
+    esp_err_t result = esp_ota_begin(partition, OTA_SIZE_UNKNOWN, &otaHandler);
+    if (result == ESP_OK) {
+      //Serial.println("OTA operation commenced successfully");
+    } else {
+      Serial.print("Failed to commence OTA operation, error: ");
+      Serial.println(result);
+      resetOTA();
+      return;
+    }
+    packageCounter = 0;
+    Serial.println("Begin OTA done");
+  }
+  else if (rxData == UPDATE_END_MSG) {
+    Serial.println("OTA: Upload completed");
+    esp_err_t result = esp_ota_end(otaHandler);
+    if (result == ESP_OK) {
+      //Serial.println("Newly written OTA app image is valid.");
+    } else {
+      Serial.print("Failed to validate OTA app image, error: ");
+      Serial.println(result);
+    }
+    if (esp_ota_set_boot_partition(esp_ota_get_next_update_partition(NULL)) == ESP_OK) {
+      delay(1000);
+      esp_restart();
+    } else {
+      Serial.println("OTA Error: Invalid boot partition");
+      delay(1000);
+      resetOTA();
+    }
+  }
+  else {
+    Serial.print(rxData.length()); 
+    Serial.print("\t");
+
+    if (esp_ota_write(otaHandler, rxData.c_str(), rxData.length()) == ESP_OK) {
+      packageCounter++;
+    }
+    else {
+      Serial.println("OTA is Fail, please try again!!!");
+      packageCounter = UINT16_MAX;
+    }
+    Serial.println(packageCounter);
+    onNotifyOTA(packageCounter);
+    // Make the writes much more reliable
+    vTaskDelay(1);
+  }
+}
+
+void BLEBikeInfo::onNotifyOTA(uint32_t stateOTA) {
+  BLECharacteristic* pCharacteristic = service->getCharacteristic(BIKE_OTA_CHAR_UUID);
+  pCharacteristic->setValue(stateOTA);
+  pCharacteristic->notify();
+}
+
+void BLEBikeInfo::setOTA() {
+    // Set some flag or state to indicate OTA is in progress
+    Serial.println("OTA mode activated");
+}
+
+void BLEBikeInfo::resetOTA() {
+    otaHandler = 0;
+    packageCounter = 0;
+    Serial.println("OTA reset");
 }
 
 void BLEBikeInfo::onReadName(BLECharacteristic* pChar) {

@@ -22,20 +22,10 @@ private:
     bool bmsInitialized;
     bool vescInitialized;
     
-    // Hall sensor interrupt variables
-    static volatile unsigned long hallPulseCount;
-    static volatile unsigned long lastHallTime;
-    static volatile float hallFrequency;
-    static volatile bool hallFrequencyReady;
-    
     // Private methods
     void updateBMSData();
     void updateVESCData();
     void updateGPIOSensors();
-    void updateHallSensors();
-    
-    // Hall sensor interrupt handler
-    static void IRAM_ATTR hallSensorISR();
 
 public:
     BikeSensorManager();
@@ -57,7 +47,6 @@ public:
     void setMotorCurrent(float current);
     void setMotorRPM(int rpm);
     
-    // Hall sensor utilities
-    unsigned long getHallPulseCount() const;
-    float calculateBikeSpeed(float hallFreq) const;
+    // Motor speed utilities
+    float calculateSpeedFromMotorRPM(float motorRPM) const;
 };

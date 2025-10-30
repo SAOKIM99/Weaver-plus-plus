@@ -100,15 +100,12 @@ void BLEBikeManager::setupServices() {
     bikeInfoService = new BLEBikeInfo(pServer->createService(BIKE_INFO_SERVICE_UUID));
     bikeInfoService->begin();
     
-    // Start the service
-    // pInfoService->start();
-    
     Serial.println("Bike Info Service started");
 }
 
 void BLEBikeManager::setupAdvertising() {
     // Get bike name for advertising
-    const char* bikeName = bikeInfoService ? bikeInfoService->getName() : "+ SAO KIM +";
+    const char* bikeName = bikeInfoService ? bikeInfoService->getName() : INIT_BIKE_NAME;
     
     // Setup MAC ID for service data
     char macID[7] = {0};
@@ -129,7 +126,7 @@ void BLEBikeManager::setupAdvertising() {
     data.setServiceData(BLEUUID(uuidServiceData), macID);
 
     pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(BIKE_INFO_SERVICE_UUID);
+    pAdvertising->addServiceUUID(BIKE_ADV_UUID);
     pAdvertising->setScanResponse(true);
     pAdvertising->setMinInterval(48);
     pAdvertising->setMaxInterval(96);
