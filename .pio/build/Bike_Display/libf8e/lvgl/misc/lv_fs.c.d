@@ -1,0 +1,36 @@
+.pio/build/Bike_Display/libf8e/lvgl/misc/lv_fs.c.o: \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/lv_fs.c \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/lv_fs.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../lv_conf_internal.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../lv_conf_kconfig.h \
+ /Users/lekimtinh/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/dio_qspi/include/sdkconfig.h \
+ /Users/lekimtinh/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_common/include/esp_attr.h \
+ lib/BikeDataDisplay/lv_conf.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../misc/lv_assert.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../misc/../lv_conf_internal.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../misc/lv_log.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../misc/lv_types.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../misc/lv_mem.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/lv_ll.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/lv_gc.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/lv_mem.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/lv_timer.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../hal/lv_hal_tick.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../hal/../lv_conf_internal.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/lv_types.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/lv_img_cache.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/lv_img_decoder.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/../lv_conf_internal.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/lv_img_buf.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/../misc/lv_color.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/../misc/../lv_conf_internal.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/../misc/lv_assert.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/../misc/lv_math.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/../misc/lv_types.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/../misc/lv_area.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/../misc/lv_fs.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/../misc/lv_types.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/lv_draw_mask.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../draw/../misc/lv_math.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../core/lv_obj_pos.h \
+ .pio/libdeps/Bike_Display/lvgl/src/misc/../core/../misc/lv_area.h

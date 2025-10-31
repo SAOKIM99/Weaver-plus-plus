@@ -276,15 +276,6 @@ private:
   // Font reference
   const lv_font_t* speed_font;
 
-  // Animation tracking
-  float currentSpeedValue = 0.0f;
-  float targetSpeedValue = 0.0f;
-  float currentCurrentValue = 0.0f;
-  float targetCurrentValue = 0.0f;
-  bool isChargingFlag = false;  // Flag để track trạng thái charging trong animation
-  lv_timer_t *speedAnimationTimer = NULL;
-  lv_timer_t *currentAnimationTimer = NULL;
-
   // Helper methods
   void createSpeedometer();
   void createCurrentDisplay();
@@ -296,6 +287,7 @@ private:
   void createParkingIcon();
   void createTurnIndicators();
   void createPassingIndicator();
+  void applyThemeToAllElements();  // Apply theme colors to all UI elements
   lv_color_t getColorByTemperature(int temp, int lowThresh, int highThresh);
   lv_color_t getColorByPercent(int percent, int lowThresh, int highThresh);
 

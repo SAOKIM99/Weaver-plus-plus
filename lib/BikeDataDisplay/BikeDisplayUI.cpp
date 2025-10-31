@@ -103,6 +103,9 @@ bool BikeDisplayUI::initialize(lv_obj_t *parent_screen) {
   createTurnIndicators();
   createPassingIndicator();
   
+  // Apply default theme colors to all elements
+  applyThemeToAllElements();
+  
   return true;
 }
 
@@ -488,235 +491,104 @@ void BikeDisplayUI::createPassingIndicator() {
   lv_obj_align(ui_passing_label, PASSING_LABEL_ALIGN, PASSING_LABEL_X, PASSING_LABEL_Y);
 }
 
-// Update speed with animation
+// Update speed - direct update without animation
 void BikeDisplayUI::updateSpeed(float speed) {
   if (!ui_speed_arc || !ui_speed_label) return;
+  
+  static float cachedSpeed = -1.0f;
   float _speed = abs(speed);  // Ensure speed is non-negative
   
-  // Kill existing animation if any
-  if (speedAnimationTimer != NULL) {
-    lv_timer_del(speedAnimationTimer);
-    speedAnimationTimer = NULL;
+  // Check if speed changed significantly (>0.5 km/h)
+  if (abs(_speed - cachedSpeed) < 0.5f) {
+    return;  // No significant change, skip update
   }
   
-  // Store target speed
-  targetSpeedValue = _speed;
+  // Update cached value
+  cachedSpeed = _speed;
   
-  // If difference is small or speed is close to 0, update directly and skip animation
-  float diff = abs(_speed - currentSpeedValue);
-  if (diff < 2.0f || _speed < 0.5f) {
-    currentSpeedValue = _speed;
-    char buffer[16];
-    sprintf(buffer, "%.0f", currentSpeedValue);
-    lv_label_set_text(ui_speed_label, buffer);
-    
-    int arc_value = (int)currentSpeedValue;
-    if (arc_value > SPEED_ARC_MAX) arc_value = SPEED_ARC_MAX;
-    if (arc_value < SPEED_ARC_MIN) arc_value = SPEED_ARC_MIN;
-    lv_arc_set_value(ui_speed_arc, arc_value);
-    
-    // Update color
-    lv_color_t speed_color;
-    if (_speed < SPEED_LOW_THRESH) {
-      speed_color = SPEED_LOW_COLOR;
-    } else if (_speed < SPEED_MEDIUM_THRESH) {
-      speed_color = SPEED_MEDIUM_COLOR;
-    } else {
-      speed_color = SPEED_WARNING_COLOR;
-    }
-    lv_obj_set_style_arc_color(ui_speed_arc, speed_color, LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    return;
+  // Update speed label
+  char buffer[16];
+  sprintf(buffer, "%.0f", _speed);
+  lv_label_set_text(ui_speed_label, buffer);
+  
+  // Update speed arc
+  int arc_value = (int)_speed;
+  if (arc_value > SPEED_ARC_MAX) arc_value = SPEED_ARC_MAX;
+  if (arc_value < SPEED_ARC_MIN) arc_value = SPEED_ARC_MIN;
+  lv_arc_set_value(ui_speed_arc, arc_value);
+  
+  // Update color based on speed
+  lv_color_t speed_color;
+  if (_speed < SPEED_LOW_THRESH) {
+    speed_color = SPEED_LOW_COLOR;
+  } else if (_speed < SPEED_MEDIUM_THRESH) {
+    speed_color = SPEED_MEDIUM_COLOR;
+  } else {
+    speed_color = SPEED_WARNING_COLOR;
   }
-  
-  // Start animation - increment by 1 every 30ms
-  speedAnimationTimer = lv_timer_create([](lv_timer_t *timer) {
-    BikeDisplayUI *ui = (BikeDisplayUI *)timer->user_data;
-    
-    // Calculate adaptive step based on current difference
-    float currentDiff = abs(ui->targetSpeedValue - ui->currentSpeedValue);
-    float stepSize = 1.0f;
-    if (currentDiff > 30.0f) {
-      stepSize = currentDiff / 3.0f;  // Lớn: chia 3 để mượt hơn
-    } else if (currentDiff >= 10.0f) {
-      stepSize = 2.0f;  // Vừa: bước 2
-    } else {
-      stepSize = 1.0f;  // Nhỏ: bước 1
-    }
-    
-    // Animate towards target
-    if (ui->currentSpeedValue < ui->targetSpeedValue) {
-      ui->currentSpeedValue = (ui->currentSpeedValue + stepSize < ui->targetSpeedValue) ? ui->currentSpeedValue + stepSize : ui->targetSpeedValue;
-    } else if (ui->currentSpeedValue > ui->targetSpeedValue) {
-      ui->currentSpeedValue = (ui->currentSpeedValue - stepSize > ui->targetSpeedValue) ? ui->currentSpeedValue - stepSize : ui->targetSpeedValue;
-    }
-    
-    char buffer[16];
-    sprintf(buffer, "%.0f", ui->currentSpeedValue);
-    lv_label_set_text(ui->ui_speed_label, buffer);
-    
-    int arc_value = (int)ui->currentSpeedValue;
-    if (arc_value > SPEED_ARC_MAX) arc_value = SPEED_ARC_MAX;
-    if (arc_value < SPEED_ARC_MIN) arc_value = SPEED_ARC_MIN;
-    lv_arc_set_value(ui->ui_speed_arc, arc_value);
-    
-    // Update color based on current value
-    lv_color_t speed_color;
-    if (ui->currentSpeedValue < SPEED_LOW_THRESH) {
-      speed_color = SPEED_LOW_COLOR;
-    } else if (ui->currentSpeedValue < SPEED_MEDIUM_THRESH) {
-      speed_color = SPEED_MEDIUM_COLOR;
-    } else {
-      speed_color = SPEED_WARNING_COLOR;
-    }
-    lv_obj_set_style_arc_color(ui->ui_speed_arc, speed_color, LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    
-    // Stop animation when target reached (use threshold instead of ==)
-    if (abs(ui->currentSpeedValue - ui->targetSpeedValue) < 0.5f) {
-      ui->currentSpeedValue = ui->targetSpeedValue;  // Force exact value
-      char buffer[16];
-      sprintf(buffer, "%.0f", ui->currentSpeedValue);
-      lv_label_set_text(ui->ui_speed_label, buffer);
-      
-      int arc_value = (int)ui->currentSpeedValue;
-      if (arc_value > SPEED_ARC_MAX) arc_value = SPEED_ARC_MAX;
-      if (arc_value < SPEED_ARC_MIN) arc_value = SPEED_ARC_MIN;
-      lv_arc_set_value(ui->ui_speed_arc, arc_value);
-      
-      lv_timer_del(timer);
-      ui->speedAnimationTimer = NULL;
-    }
-  }, 15, this);  // Update every 15ms (nhanh hơn 2x)
+  lv_obj_set_style_arc_color(ui_speed_arc, speed_color, LV_PART_INDICATOR | LV_STATE_DEFAULT);
 }
 
-// Update current with animation
+// Update current - direct update without animation
 void BikeDisplayUI::updateCurrent(float current, bool isCharging) {
-  if (!ui_current_arc  || !ui_current_text) return;
+  if (!ui_current_arc || !ui_current_text) return;
   
-  // Determine if charging (positive) or discharging (negative)
+  static float cachedCurrent = -1.0f;
+  static bool cachedIsCharging = false;
+  
   float absCurrent = abs(current);  // Get absolute value
   
-  // Store charging flag for animation
-  isChargingFlag = isCharging;
-  
-  // Kill existing animation if any
-  if (currentAnimationTimer != NULL) {
-    lv_timer_del(currentAnimationTimer);
-    currentAnimationTimer = NULL;
+  // Check if current changed
+  if (abs(absCurrent - cachedCurrent) < 0.25f && isCharging == cachedIsCharging) {
+    return;  // No significant change, skip update
   }
   
-  // Store target current
-  targetCurrentValue = absCurrent;
+  // Update cached values
+  cachedCurrent = absCurrent;
+  cachedIsCharging = isCharging;
   
-  // Calculate difference
-  float diff = abs(absCurrent - currentCurrentValue);
-  
-  // If difference is very small or target is close to 0, update directly and skip animation
-  if (diff < 0.5f || absCurrent < 0.2f) {
-    currentCurrentValue = absCurrent;
-    char buffer[16];
-    if (isCharging) {
-      sprintf(buffer, "+%.1f", currentCurrentValue);
-    } else {
-      sprintf(buffer, "%.1f", currentCurrentValue);
-    }
-    lv_label_set_text(ui_current_text, buffer);
-    
-    int arc_value = (int)currentCurrentValue;
-    if (arc_value > CURRENT_ARC_MAX) arc_value = CURRENT_ARC_MAX;
-    if (arc_value < CURRENT_ARC_MIN) arc_value = CURRENT_ARC_MIN;
-    lv_arc_set_value(ui_current_arc, arc_value);
-    
-    // Update color
-    lv_color_t current_color;
-    if (absCurrent < CURRENT_LOW_THRESH) {
-      current_color = CURRENT_LOW_COLOR;
-    } else if (absCurrent < CURRENT_MEDIUM_THRESH) {
-      current_color = CURRENT_MEDIUM_COLOR;
-    } else if (absCurrent < CURRENT_HIGH_THRESH) {
-      current_color = CURRENT_HIGH_COLOR;
-    } else {
-      current_color = CURRENT_WARNING_COLOR;
-    }
-    lv_obj_clear_flag(ui_current_arc, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_style_arc_color(ui_current_arc, current_color, LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    return;
+  // Update current label with +/- prefix
+  char buffer[16];
+  if (isCharging) {
+    sprintf(buffer, "+%.1f", absCurrent);
+  } else {
+    sprintf(buffer, "%.1f", absCurrent);
   }
+  lv_label_set_text(ui_current_text, buffer);
   
-  // Start animation - increment by 0.5 every 30ms
-  currentAnimationTimer = lv_timer_create([](lv_timer_t *timer) {
-    BikeDisplayUI *ui = (BikeDisplayUI *)timer->user_data;
-    
-    // Calculate adaptive step based on current difference
-    float currentDiff = abs(ui->targetCurrentValue - ui->currentCurrentValue);
-    float stepSize = 0.5f;
-    if (currentDiff > 20.0f) {
-      stepSize = currentDiff / 10.0f;  // Lớn: chia 10 để mượt hơn
-    } else if (currentDiff >= 10.0f) {
-      stepSize = 1.0f;  // Vừa: bước 1
-    } else {
-      stepSize = 0.5f;  // Nhỏ: bước 0.5
-    }
-    
-    // Animate towards target
-    if (ui->currentCurrentValue < ui->targetCurrentValue) {
-      ui->currentCurrentValue = (ui->currentCurrentValue + stepSize < ui->targetCurrentValue) ? ui->currentCurrentValue + stepSize : ui->targetCurrentValue;
-    } else if (ui->currentCurrentValue > ui->targetCurrentValue) {
-      ui->currentCurrentValue = (ui->currentCurrentValue - stepSize > ui->targetCurrentValue) ? ui->currentCurrentValue - stepSize : ui->targetCurrentValue;
-    }
-    
-    char buffer[16];
-    // Use isChargingFlag to show +/- prefix
-    if (ui->isChargingFlag) {
-      sprintf(buffer, "+%.1f", ui->currentCurrentValue);
-    } else {
-      sprintf(buffer, "%.1f", ui->currentCurrentValue);
-    }
-    lv_label_set_text(ui->ui_current_text, buffer);
-    
-    int arc_value = (int)ui->currentCurrentValue;
-    if (arc_value > CURRENT_ARC_MAX) arc_value = CURRENT_ARC_MAX;
-    if (arc_value < CURRENT_ARC_MIN) arc_value = CURRENT_ARC_MIN;
-    lv_arc_set_value(ui->ui_current_arc, arc_value);
-    
-    // Update color based on current value
-    lv_color_t current_color;
-    if (ui->currentCurrentValue < CURRENT_LOW_THRESH) {
-      current_color = CURRENT_LOW_COLOR;
-    } else if (ui->currentCurrentValue < CURRENT_MEDIUM_THRESH) {
-      current_color = CURRENT_MEDIUM_COLOR;
-    } else if (ui->currentCurrentValue < CURRENT_HIGH_THRESH) {
-      current_color = CURRENT_HIGH_COLOR;
-    } else {
-      current_color = CURRENT_WARNING_COLOR;
-    }
-    lv_obj_clear_flag(ui->ui_current_arc, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_style_arc_color(ui->ui_current_arc, current_color, LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    
-    // Stop animation when target reached (use threshold instead of ==)
-    if (abs(ui->currentCurrentValue - ui->targetCurrentValue) < 0.25f) {
-      ui->currentCurrentValue = ui->targetCurrentValue;  // Force exact value
-      char buffer[16];
-      if (ui->isChargingFlag) {
-        sprintf(buffer, "+%.1f", ui->currentCurrentValue);
-      } else {
-        sprintf(buffer, "%.1f", ui->currentCurrentValue);
-      }
-      lv_label_set_text(ui->ui_current_text, buffer);
-      
-      int arc_value = (int)ui->currentCurrentValue;
-      if (arc_value > CURRENT_ARC_MAX) arc_value = CURRENT_ARC_MAX;
-      if (arc_value < CURRENT_ARC_MIN) arc_value = CURRENT_ARC_MIN;
-      lv_arc_set_value(ui->ui_current_arc, arc_value);
-      
-      lv_timer_del(timer);
-      ui->currentAnimationTimer = NULL;
-    }
-  }, 15, this);  // Update every 15ms (nhanh hơn 2x)
+  // Update current arc
+  int arc_value = (int)absCurrent;
+  if (arc_value > CURRENT_ARC_MAX) arc_value = CURRENT_ARC_MAX;
+  if (arc_value < CURRENT_ARC_MIN) arc_value = CURRENT_ARC_MIN;
+  lv_arc_set_value(ui_current_arc, arc_value);
+  
+  // Update color based on current
+  lv_color_t current_color;
+  if (absCurrent < CURRENT_LOW_THRESH) {
+    current_color = CURRENT_LOW_COLOR;
+  } else if (absCurrent < CURRENT_MEDIUM_THRESH) {
+    current_color = CURRENT_MEDIUM_COLOR;
+  } else if (absCurrent < CURRENT_HIGH_THRESH) {
+    current_color = CURRENT_HIGH_COLOR;
+  } else {
+    current_color = CURRENT_WARNING_COLOR;
+  }
+  lv_obj_clear_flag(ui_current_arc, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_style_arc_color(ui_current_arc, current_color, LV_PART_INDICATOR | LV_STATE_DEFAULT);
 }
 
 // Update battery percentage
 void BikeDisplayUI::updateBattery(int percent) {
   if (!ui_battery_text) return;
+  
+  static int cachedBatteryPercent = -1;
+  
+  // Only update if battery percent changed
+  if (percent == cachedBatteryPercent) {
+    return;
+  }
+  
+  cachedBatteryPercent = percent;
   
   char buffer[16];
   sprintf(buffer, "%d%%", percent);
@@ -731,6 +603,15 @@ void BikeDisplayUI::updateBattery(int percent) {
 void BikeDisplayUI::updateECU(int temperature) {
   if (!ui_ecu_temp_label) return;
   
+  static int cachedEcuTemp = -1;
+  
+  // Only update if temperature changed
+  if (temperature == cachedEcuTemp) {
+    return;
+  }
+  
+  cachedEcuTemp = temperature;
+  
   char buffer[16];
   sprintf(buffer, "%d°C", temperature);
   lv_label_set_text(ui_ecu_temp_label, buffer);
@@ -742,20 +623,33 @@ void BikeDisplayUI::updateECU(int temperature) {
 
 // Update motor temperature and current
 void BikeDisplayUI::updateMotor(int temperature, float current) {
-  if (ui_motor_temp_value) {
-    char temp_buffer[16];
-    sprintf(temp_buffer, "%d°C", temperature);
-    lv_label_set_text(ui_motor_temp_value, temp_buffer);
+  static int cachedMotorTemp = -1;
+  static float cachedMotorCurrent = -1.0f;
+  
+  // Check if motor temp changed
+  if (temperature != cachedMotorTemp) {
+    cachedMotorTemp = temperature;
     
-    // Color coding for motor temperature  
-    lv_color_t temp_color = getColorByTemperature(temperature, 60, 80);
-    lv_obj_set_style_text_color(ui_motor_temp_value, temp_color, LV_PART_MAIN | LV_STATE_DEFAULT);
+    if (ui_motor_temp_value) {
+      char temp_buffer[16];
+      sprintf(temp_buffer, "%d°C", temperature);
+      lv_label_set_text(ui_motor_temp_value, temp_buffer);
+      
+      // Color coding for motor temperature  
+      lv_color_t temp_color = getColorByTemperature(temperature, 60, 80);
+      lv_obj_set_style_text_color(ui_motor_temp_value, temp_color, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
   }
   
-  if (ui_motor_current_value) {
-    char current_buffer[16];
-    sprintf(current_buffer, "%.1fA", current);
-    lv_label_set_text(ui_motor_current_value, current_buffer);
+  // Check if motor current changed
+  if (abs(current - cachedMotorCurrent) >= 0.1f) {
+    cachedMotorCurrent = current;
+    
+    if (ui_motor_current_value) {
+      char current_buffer[16];
+      sprintf(current_buffer, "%.1fA", current);
+      lv_label_set_text(ui_motor_current_value, current_buffer);
+    }
   }
 }
 
@@ -841,6 +735,15 @@ void BikeDisplayUI::updateBattery2(float volt, int percent, uint16_t diffVoltMv,
 void BikeDisplayUI::updateOdometer(float distance) {
   if (!ui_odo_label) return;
   
+  static float cachedOdometer = -1.0f;
+  
+  // Only update if odometer changed significantly (>0.1 km)
+  if (abs(distance - cachedOdometer) < 0.1f) {
+    return;
+  }
+  
+  cachedOdometer = distance;
+  
   char buffer[32];
   sprintf(buffer, "ODO: %.1fkm", distance);
   lv_label_set_text(ui_odo_label, buffer);
@@ -850,12 +753,19 @@ void BikeDisplayUI::updateOdometer(float distance) {
 void BikeDisplayUI::updateBluetooth(bool connected) {
   if (!ui_bluetooth_icon) return;
   
+  static bool cachedBluetoothConnected = false;
+  
+  // Only update if status changed
+  if (connected == cachedBluetoothConnected) {
+    return;
+  }
+  
+  cachedBluetoothConnected = connected;
+  
   if (connected) {
     lv_obj_set_style_text_color(ui_bluetooth_icon, UI_COLOR_ACCENT, LV_PART_MAIN | LV_STATE_DEFAULT);
-    // Serial.println("🔵 [UI] Bluetooth icon: BLUE (connected)");
   } else {
     lv_obj_set_style_text_color(ui_bluetooth_icon, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);
-    // Serial.println("⚫ [UI] Bluetooth icon: HIDDEN (disconnected)");
   }
 }
 
@@ -863,12 +773,19 @@ void BikeDisplayUI::updateBluetooth(bool connected) {
 void BikeDisplayUI::updateParking(bool parking) {
   if (!ui_parking_icon) return;
   
+  static bool cachedParkingActive = false;
+  
+  // Only update if status changed
+  if (parking == cachedParkingActive) {
+    return;
+  }
+  
+  cachedParkingActive = parking;
+  
   if (parking) {
-    lv_obj_set_style_text_color(ui_parking_icon, UI_COLOR_WARNING, LV_PART_MAIN | LV_STATE_DEFAULT);  // Màu vàng khi đỗ
-    // Serial.println("🅿️ [UI] Parking icon: YELLOW (brake pressed)");
+    lv_obj_set_style_text_color(ui_parking_icon, UI_COLOR_WARNING, LV_PART_MAIN | LV_STATE_DEFAULT);
   } else {
-    lv_obj_set_style_text_color(ui_parking_icon, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);       // Ẩn khi không đỗ
-    // Serial.println("⚫ [UI] Parking icon: HIDDEN (brake released)");
+    lv_obj_set_style_text_color(ui_parking_icon, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);
   }
 }
 
@@ -876,23 +793,43 @@ void BikeDisplayUI::updateParking(bool parking) {
 void BikeDisplayUI::updateTurnIndicators(bool leftActive, bool rightActive) {
   if (!ui_turn_left_icon || !ui_turn_right_icon) return;
   
+  static bool cachedTurnLeftActive = false;
+  static bool cachedTurnRightActive = false;
+  
+  // Only update if status changed
+  if (leftActive == cachedTurnLeftActive && rightActive == cachedTurnRightActive) {
+    return;
+  }
+  
+  cachedTurnLeftActive = leftActive;
+  cachedTurnRightActive = rightActive;
+  
   // Left turn indicator
   if (leftActive) {
-    lv_obj_set_style_text_color(ui_turn_left_icon, UI_COLOR_WARNING, LV_PART_MAIN | LV_STATE_DEFAULT);  // Màu vàng
+    lv_obj_set_style_text_color(ui_turn_left_icon, UI_COLOR_WARNING, LV_PART_MAIN | LV_STATE_DEFAULT);
   } else {
-    lv_obj_set_style_text_color(ui_turn_left_icon, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);       // Ẩn
+    lv_obj_set_style_text_color(ui_turn_left_icon, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);
   }
   
   // Right turn indicator  
   if (rightActive) {
-    lv_obj_set_style_text_color(ui_turn_right_icon, UI_COLOR_WARNING, LV_PART_MAIN | LV_STATE_DEFAULT); // Màu vàng
+    lv_obj_set_style_text_color(ui_turn_right_icon, UI_COLOR_WARNING, LV_PART_MAIN | LV_STATE_DEFAULT);
   } else {
-    lv_obj_set_style_text_color(ui_turn_right_icon, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);      // Ẩn
+    lv_obj_set_style_text_color(ui_turn_right_icon, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);
   }
 }
 
 void BikeDisplayUI::updatePassing(bool active) {
   if (!ui_passing_label) return;
+  
+  static bool cachedPassingActive = false;
+  
+  // Only update if status changed
+  if (active == cachedPassingActive) {
+    return;
+  }
+  
+  cachedPassingActive = active;
   
   lv_color_t color = active ? UI_COLOR_WARNING : UI_COLOR_BG;
   lv_obj_set_style_text_color(ui_passing_label, color, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -914,81 +851,104 @@ void BikeDisplayUI::updateAll(const BikeDataDisplay& data) {
   updatePassing(data.passingActive);
 }
 
-// Theme setting (placeholder)
+// Apply theme colors to all UI elements
+void BikeDisplayUI::applyThemeToAllElements() {
+  if (!ui_main_screen) return;
+  
+  // Background
+  lv_obj_set_style_bg_color(ui_main_screen, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);
+  
+  // Main text colors
+  lv_color_t textColor = UI_COLOR_ACCENT;
+  lv_color_t secondaryTextColor = UI_COLOR_WARNING;
+  
+  // Speed display
+  if (ui_speed_label) {
+    lv_obj_set_style_text_color(ui_speed_label, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  if (ui_speed_unit_label) {
+    lv_obj_set_style_text_color(ui_speed_unit_label, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  
+  // Current display
+  if (ui_current_text) {
+    lv_obj_set_style_text_color(ui_current_text, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  if (ui_current_label) {
+    lv_obj_set_style_text_color(ui_current_label, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  
+  // Battery
+  if (ui_battery_text) {
+    lv_obj_set_style_text_color(ui_battery_text, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  if (ui_battery1_title) {
+    lv_obj_set_style_text_color(ui_battery1_title, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  if (ui_battery2_title) {
+    lv_obj_set_style_text_color(ui_battery2_title, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  
+  // Battery 1 values
+  if (ui_bat1_volt_value) lv_obj_set_style_text_color(ui_bat1_volt_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (ui_bat1_percent_value) lv_obj_set_style_text_color(ui_bat1_percent_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (ui_bat1_diff_value) lv_obj_set_style_text_color(ui_bat1_diff_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (ui_bat1_temp_value) lv_obj_set_style_text_color(ui_bat1_temp_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (ui_bat1_current_value) lv_obj_set_style_text_color(ui_bat1_current_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  
+  // Battery 2 values
+  if (ui_bat2_volt_value) lv_obj_set_style_text_color(ui_bat2_volt_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (ui_bat2_percent_value) lv_obj_set_style_text_color(ui_bat2_percent_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (ui_bat2_diff_value) lv_obj_set_style_text_color(ui_bat2_diff_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (ui_bat2_temp_value) lv_obj_set_style_text_color(ui_bat2_temp_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (ui_bat2_current_value) lv_obj_set_style_text_color(ui_bat2_current_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  
+  // ECU and Motor labels
+  if (ui_ecu_label) {
+    lv_obj_set_style_text_color(ui_ecu_label, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  if (ui_motor_label) {
+    lv_obj_set_style_text_color(ui_motor_label, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  
+  // ECU and Motor values
+  if (ui_ecu_temp_label) lv_obj_set_style_text_color(ui_ecu_temp_label, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (ui_motor_temp_value) lv_obj_set_style_text_color(ui_motor_temp_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (ui_motor_current_value) lv_obj_set_style_text_color(ui_motor_current_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  
+  // Odometer
+  if (ui_odo_label) {
+    lv_obj_set_style_text_color(ui_odo_label, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  
+  // Icons (Bluetooth, Parking, Turn indicators, Passing)
+  if (ui_bluetooth_icon) {
+    lv_obj_set_style_text_color(ui_bluetooth_icon, UI_COLOR_SUCCESS, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  if (ui_parking_icon) {
+    lv_obj_set_style_text_color(ui_parking_icon, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  if (ui_turn_left_icon) {
+    lv_obj_set_style_text_color(ui_turn_left_icon, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  if (ui_turn_right_icon) {
+    lv_obj_set_style_text_color(ui_turn_right_icon, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  if (ui_passing_label) {
+    lv_obj_set_style_text_color(ui_passing_label, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+}
+
+// Theme setting
 void BikeDisplayUI::setTheme(int themeId) {
   // Đổi theme: 0 = dark, 1 = light
   if (themeId == THEME_DARK || themeId == THEME_LIGHT) {
     CURRENT_THEME = themeId;
     
-    // Cập nhật lại màu nền
-    if (ui_main_screen) {
-      lv_obj_set_style_bg_color(ui_main_screen, UI_COLOR_BG, LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
+    // Apply new theme to all elements
+    applyThemeToAllElements();
     
-    // Cập nhật màu text cho tất cả labels theo theme mới
-    lv_color_t textColor = UI_COLOR_ACCENT;  // Màu text chính
-    
-    // Speed display
-    if (ui_speed_label) {
-      lv_obj_set_style_text_color(ui_speed_label, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-    
-    // Unit labels - sử dụng màu phụ (text phụ)
-    lv_color_t secondaryTextColor = UI_COLOR_WARNING;  // Màu text phụ
-    
-    // Speed unit "Km/h"
-    if (ui_speed_unit_label) {
-      lv_obj_set_style_text_color(ui_speed_unit_label, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-    
-    // Current unit "A"
-    if (ui_current_label) {
-      lv_obj_set_style_text_color(ui_current_label, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-    
-    // Battery titles
-    if (ui_battery1_title) {
-      lv_obj_set_style_text_color(ui_battery1_title, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-    if (ui_battery2_title) {
-      lv_obj_set_style_text_color(ui_battery2_title, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-    
-    // ECU and Motor labels
-    if (ui_ecu_label) {
-      lv_obj_set_style_text_color(ui_ecu_label, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-    if (ui_motor_label) {
-      lv_obj_set_style_text_color(ui_motor_label, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-    
-    // Odometer
-    if (ui_odo_label) {
-      lv_obj_set_style_text_color(ui_odo_label, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    }
-    
-    // Battery value labels - sử dụng màu phụ cho text ổn định
-    if (ui_bat1_volt_value) lv_obj_set_style_text_color(ui_bat1_volt_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    if (ui_bat1_percent_value) lv_obj_set_style_text_color(ui_bat1_percent_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    if (ui_bat1_diff_value) lv_obj_set_style_text_color(ui_bat1_diff_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    if (ui_bat1_temp_value) lv_obj_set_style_text_color(ui_bat1_temp_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    if (ui_bat1_current_value) lv_obj_set_style_text_color(ui_bat1_current_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    
-    if (ui_bat2_volt_value) lv_obj_set_style_text_color(ui_bat2_volt_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    if (ui_bat2_percent_value) lv_obj_set_style_text_color(ui_bat2_percent_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    if (ui_bat2_diff_value) lv_obj_set_style_text_color(ui_bat2_diff_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    if (ui_bat2_temp_value) lv_obj_set_style_text_color(ui_bat2_temp_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    if (ui_bat2_current_value) lv_obj_set_style_text_color(ui_bat2_current_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    
-    // ECU and Motor values
-    if (ui_ecu_temp_label) lv_obj_set_style_text_color(ui_ecu_temp_label, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    if (ui_motor_temp_value) lv_obj_set_style_text_color(ui_motor_temp_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    if (ui_motor_current_value) lv_obj_set_style_text_color(ui_motor_current_value, secondaryTextColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    
-    // Current value
-    if (ui_current_text) lv_obj_set_style_text_color(ui_current_text, textColor, LV_PART_MAIN | LV_STATE_DEFAULT);
-    
-    Serial.printf("[THEME] Theme changed to %d, updated all text colors\n", themeId);
+    Serial.printf("[THEME] Theme changed to %d, updated all UI elements\n", themeId);
   }
 }
 

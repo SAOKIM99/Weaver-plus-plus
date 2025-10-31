@@ -10,8 +10,9 @@
 // ================================================
 // THEME SWITCHING CONFIGURATION DEFINES
 // ================================================
-#define THEME_SEQUENCE_TIMEOUT_MS     2000    // Timeout for click after long press (ms)
-#define THEME_LONG_PRESS_DURATION_MS  1000    // Minimum long press duration (ms)
+#define THEME_SEQUENCE_TIMEOUT_MS     4000    // Timeout for click after long press (ms) - INCREASED to 4s
+#define THEME_LONG_PRESS_DURATION_MS  600     // Minimum long press duration (ms) - REDUCED to 600ms for easy trigger
+#define THEME_BUTTON_DEBOUNCE_MS      50      // OneButton hardware debounce (ms) - handled by library
 
 // ================================================
 // CAN CONFIGURATION DEFINES
@@ -24,6 +25,24 @@
 // ================================================
 #define DISPLAY_UPDATE_INTERVAL_MS    100     // Dashboard update interval (ms)
 #define CAN_STATS_INTERVAL_MS         10000   // CAN statistics print interval (ms)
+
+// ================================================
+// RTOS TASK CONFIGURATION
+// ================================================
+#define LVGL_TASK_PRIORITY            2       // LVGL rendering priority
+#define CAN_TASK_PRIORITY             3       // CAN processing priority (higher)
+#define UI_UPDATE_TASK_PRIORITY       2       // UI update priority
+#define BUTTON_TASK_PRIORITY          1       // Button handling priority (lower)
+
+#define LVGL_TASK_STACK_SIZE          4096    // Stack size for LVGL task
+#define CAN_TASK_STACK_SIZE           3072    // Stack size for CAN task
+#define UI_UPDATE_TASK_STACK_SIZE     3072    // Stack size for UI update task
+#define BUTTON_TASK_STACK_SIZE        2048    // Stack size for button task
+
+#define LVGL_TASK_CORE                1       // Run LVGL on core 1
+#define CAN_TASK_CORE                 0       // Run CAN on core 0 
+#define UI_UPDATE_TASK_CORE           1       // Run UI updates on core 1
+#define BUTTON_TASK_CORE              0       // Run button handling on core 0
 
 // Khai báo TFT
 TFT_eSPI tft = TFT_eSPI();
@@ -50,7 +69,6 @@ BLEDisplayManager bleDisplayManager;
 OneButton themeButton(COS_PIN, false); // Active HIGH
 
 // Theme switching state
-bool longPressCompleted = false;
 unsigned long lastLongPressEnd = 0;
 
 // Bike data - will be updated via CAN
@@ -60,30 +78,28 @@ BikeDataDisplay bike;
 bool canConnected = false;
 unsigned long lastCANMessage = 0;
 
+// RTOS Task Handles
+TaskHandle_t lvglTaskHandle = NULL;
+TaskHandle_t canTaskHandle = NULL;
+TaskHandle_t uiUpdateTaskHandle = NULL;
+TaskHandle_t buttonTaskHandle = NULL;
+
+// Mutex for bike data protection
+SemaphoreHandle_t bikeDataMutex = NULL;
+
 // OneButton callback functions
 void onThemeLongPressStop() {
-  longPressCompleted = true;
   lastLongPressEnd = millis();
-  // Serial.printf("[THEME] ✅ Long press COMPLETED - waiting for quick CLICK within %d ms\n", THEME_SEQUENCE_TIMEOUT_MS);
-  // Serial.println("[THEME] 📋 Sequence: Long Press → Click (thả nút ra rồi nhấn nhanh)");
 }
 
 void onThemeClick() {
-  // Serial.printf("[THEME] 🔘 Click detected, longPressCompleted=%d, timeDiff=%lu\n",
-  //               longPressCompleted, millis() - lastLongPressEnd);
-  
   // Check if this follows a long press within timeout
-  if (longPressCompleted && (millis() - lastLongPressEnd) < THEME_SEQUENCE_TIMEOUT_MS) {
-    // Quick click within 1 second after long press - switch theme!
+  if (millis() - lastLongPressEnd < THEME_SEQUENCE_TIMEOUT_MS) {
+    // Quick click within timeout after long press - switch theme!
     int currentTheme = dashboard.getCurrentTheme();
     int newTheme = (currentTheme == 0) ? 1 : 0;
     dashboard.setTheme(newTheme);
     dashboard.flashScreen();
-    Serial.printf("[THEME] 🎨 Theme switched to %d\n", newTheme);
-    // Serial.println("[THEME] ✅ SUCCESS: Theme changed!");
-    longPressCompleted = false; // Reset
-  } else {
-    // Serial.println("[THEME] ❌ FAILED: Not a valid sequence or timeout");
   }
 }
 
@@ -108,64 +124,88 @@ void onCANMessage(uint32_t id, uint8_t* data, uint8_t length) {
     
     // Serial.printf("📨 [onCANMessage] Received ID=0x%03X, length=%d\n", id, length);
     
-    // Parse the incoming CAN message
-    if (canManager.parseCANMessage(id, data, length, bike)) {
-        // Successfully parsed - log key data
-        // switch(id) {
-        //     case MSG_ID_BIKE_STATUS:
-        //         Serial.printf("[CAN] Status: Speed=%.1f km/h, BT=%s, L=%s, R=%s\n",
-        //                     bike.speed,
-        //                     bike.bluetoothConnected ? "ON" : "OFF",
-        //                     bike.turnLeftActive ? "ON" : "OFF",
-        //                     bike.turnRightActive ? "ON" : "OFF");
-        //         Serial.printf("📱 [CAN-RX] Bluetooth Status: bike.bluetoothConnected = %s\n", 
-        //                     bike.bluetoothConnected ? "true" : "false");
-        //         break;
-                
-        //     case MSG_ID_BMS_DATA + 1: // BMS1
-        //         Serial.printf("[CAN] BMS1: %.2fV, %d%%, %.1f°C\n",
-        //                     bike.battery1Volt,
-        //                     bike.battery1Percent,
-        //                     (float)bike.battery1Temp);
-        //         break;
-                
-        //     case MSG_ID_BMS_DATA + 2: // BMS2
-        //         Serial.printf("[CAN] BMS2: %.2fV, %d%%, %.1f°C\n",
-        //                     bike.battery2Volt,
-        //                     bike.battery2Percent,
-        //                     (float)bike.battery2Temp);
-        //         break;
-                
-        //     case MSG_ID_VESC_DATA:
-        //         Serial.printf("[CAN] Motor: %.2fA, Motor=%.1f°C, ECU=%.1f°C\n",
-        //                     bike.motorCurrent,
-        //                     (float)bike.motorTemp,
-        //                     (float)bike.ecuTemp);
-        //         break;
-                
-        //     case MSG_ID_DISTANCE_DATA:
-        //         Serial.printf("[CAN] Distance: Odo=%.1fkm, Trip=%.1fkm\n",
-        //                     bike.odometer, bike.tripDistance);
-        //         break;
-        // }
-    } else {
-        // Serial.printf("[CAN] Parse failed for ID: 0x%03X\n", id);
+    // Parse the incoming CAN message with mutex protection
+    if (xSemaphoreTake(bikeDataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        canManager.parseCANMessage(id, data, length, bike);
+        xSemaphoreGive(bikeDataMutex);
     }
 }
 
-// Check CAN connection status
 void checkCANConnection() {
-    static unsigned long lastCheck = 0;
-    if (millis() - lastCheck > CAN_CHECK_INTERVAL_MS) {
-        if (millis() - lastCANMessage > CAN_CONNECTION_TIMEOUT_MS) {
-            if (canConnected) {
-                canConnected = false;
-                // Serial.println("[CAN] Connection lost");
-            }
-        }
-        lastCheck = millis();
+    if (canConnected && (millis() - lastCANMessage > CAN_CONNECTION_TIMEOUT_MS)) {
+        canConnected = false;
+        Serial.println("⚠️  CAN connection lost!");
     }
 }
+
+// ================================================
+// RTOS TASK FUNCTIONS
+// ================================================
+
+// Task 1: LVGL Handler - runs on Core 1
+void lvglTask(void* parameter) {
+    Serial.println("🎨 LVGL Task started on Core " + String(xPortGetCoreID()));
+    
+    for(;;) {
+        lv_timer_handler();
+        vTaskDelay(pdMS_TO_TICKS(5));  // 5ms refresh rate
+    }
+}
+
+// Task 2: CAN Processing - runs on Core 0 (high priority)
+void canTask(void* parameter) {
+    Serial.println("📡 CAN Task started on Core " + String(xPortGetCoreID()));
+    
+    for(;;) {
+        canManager.update();
+        checkCANConnection();
+        vTaskDelay(pdMS_TO_TICKS(10));  // 10ms CAN polling
+    }
+}
+
+// Task 3: UI Update - runs on Core 1
+void uiUpdateTask(void* parameter) {
+    Serial.println("🖥️  UI Update Task started on Core " + String(xPortGetCoreID()));
+    
+    for(;;) {
+        // Copy bike data with mutex protection
+        BikeDataDisplay localBike;
+        if (xSemaphoreTake(bikeDataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            localBike = bike;
+            xSemaphoreGive(bikeDataMutex);
+        }
+        
+        // Update dashboard with local copy
+        dashboard.updateAll(localBike);
+        
+        vTaskDelay(pdMS_TO_TICKS(DISPLAY_UPDATE_INTERVAL_MS));  // 100ms update rate
+    }
+}
+
+// Task 4: Button Handling - runs on Core 0
+void buttonTask(void* parameter) {
+    Serial.println("🔘 Button Task started on Core " + String(xPortGetCoreID()));
+    
+    for(;;) {
+        // Read passing button
+        bool passingPressed = (digitalRead(COS_PIN) == HIGH);
+        
+        // Update bike data with mutex
+        if (xSemaphoreTake(bikeDataMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+            bike.passingActive = passingPressed;
+            xSemaphoreGive(bikeDataMutex);
+        }
+        
+        // Process theme button
+        themeButton.tick();
+        
+        vTaskDelay(pdMS_TO_TICKS(10));  // 10ms button polling
+    }
+}
+
+// ================================================
+// ARDUINO SETUP & LOOP
+// ================================================
 
 void setup() {
   Serial.begin(115200);
@@ -191,6 +231,8 @@ void setup() {
   // Serial.println("✅ BLE Display Manager initialized");
   
   // Setup OneButton callbacks for theme switching
+  themeButton.setPressMs(THEME_LONG_PRESS_DURATION_MS);
+  themeButton.setDebounceMs(THEME_BUTTON_DEBOUNCE_MS);
   themeButton.attachLongPressStop(onThemeLongPressStop);
   themeButton.attachClick(onThemeClick);
   
@@ -256,57 +298,71 @@ void setup() {
   bike.passingActive = false;      // Khởi tạo passing indicator tắt
   
   Serial.println("🚴‍♂️ LVGL Electric Bike Dashboard with CAN Support initialized!");
+  
+  // ================================================
+  // CREATE MUTEX & RTOS TASKS
+  // ================================================
+  
+  // Create mutex for bike data protection
+  bikeDataMutex = xSemaphoreCreateMutex();
+  if (bikeDataMutex == NULL) {
+    Serial.println("❌ Failed to create bike data mutex!");
+    while(1); // Halt
+  }
+  Serial.println("✅ Bike data mutex created");
+  
+  // Create LVGL Task on Core 1 (display rendering)
+  xTaskCreatePinnedToCore(
+    lvglTask,              // Task function
+    "LVGL_Task",           // Task name
+    LVGL_TASK_STACK_SIZE,  // Stack size
+    NULL,                  // Parameters
+    LVGL_TASK_PRIORITY,    // Priority
+    &lvglTaskHandle,       // Task handle
+    LVGL_TASK_CORE         // Core ID
+  );
+  
+  // Create CAN Task on Core 0 (high priority I/O)
+  xTaskCreatePinnedToCore(
+    canTask,
+    "CAN_Task",
+    CAN_TASK_STACK_SIZE,
+    NULL,
+    CAN_TASK_PRIORITY,
+    &canTaskHandle,
+    CAN_TASK_CORE
+  );
+  
+  // Create UI Update Task on Core 1
+  xTaskCreatePinnedToCore(
+    uiUpdateTask,
+    "UI_Update_Task",
+    UI_UPDATE_TASK_STACK_SIZE,
+    NULL,
+    UI_UPDATE_TASK_PRIORITY,
+    &uiUpdateTaskHandle,
+    UI_UPDATE_TASK_CORE
+  );
+  
+  // Create Button Task on Core 0
+  xTaskCreatePinnedToCore(
+    buttonTask,
+    "Button_Task",
+    BUTTON_TASK_STACK_SIZE,
+    NULL,
+    BUTTON_TASK_PRIORITY,
+    &buttonTaskHandle,
+    BUTTON_TASK_CORE
+  );
+  
+  Serial.println("✅ All RTOS tasks created successfully!");
+  Serial.println("📡 System running with FreeRTOS task scheduler");
   // Serial.println("📡 Waiting for CAN messages from main controller...");
+  vTaskDelete(NULL);  // Delete Arduino loop task
 }
 
 void loop() {
-  static unsigned long lastUpdate = 0;
-  
-  // Process incoming CAN messages
-  canManager.update();
-  
-  // Check CAN connection status
-  checkCANConnection();
-
-  // Read passing button (active low)
-  bool passingPressed = (digitalRead(COS_PIN) == HIGH);
-  bike.passingActive = passingPressed;
-  
-  // Update OneButton for theme switching
-  themeButton.tick();
-  
-  // Update BLE Display Manager
-  // bleDisplayManager.update();
-  
-  // Reset long press state if timeout expired
-  if (longPressCompleted && (millis() - lastLongPressEnd) >= THEME_SEQUENCE_TIMEOUT_MS) {
-    longPressCompleted = false;
-    // Serial.println("[THEME] Click timeout - reset");
-  }
-  
-  // Cập nhật dashboard mỗi 100ms
-  if(millis() - lastUpdate > DISPLAY_UPDATE_INTERVAL_MS) {
-    dashboard.updateAll(bike);
-    lastUpdate = millis();
-    
-    // Debug info với CAN status
-    // Serial.printf("CAN:%s Speed:%.1f km/h Bat:%d%% Motor:%.1f°C BT:%s PASS:%s\n",
-    //               canConnected ? "OK" : "LOST",
-    //               bike.speed,
-    //               bike.batteryPercent,
-    //               (float)bike.motorTemp,
-    //               bike.bluetoothConnected ? "ON" : "OFF",
-    //               bike.passingActive ? "ON" : "OFF");
-  }
-  
-  // Print CAN statistics every 10 seconds
-  static unsigned long lastStats = 0;
-  if (millis() - lastStats > CAN_STATS_INTERVAL_MS) {
-    // Serial.printf("[STATS] CAN Messages Received: %d\n", canManager.getMessagesReceived());
-    lastStats = millis();
-  }
-  
-  // Xử lý LVGL
-  lv_timer_handler();
-  delay(5);
+  // Empty loop - all work is done by RTOS tasks
+  // FreeRTOS scheduler handles everything
+  // vTaskDelay(pdMS_TO_TICKS(1000));  // Yield to scheduler, wake up every 1s for watchdog
 }
