@@ -1,29 +1,5 @@
 #include "BikeSensorManager.h"
 
-// Static variables for Hall sensor interrupt
-volatile unsigned long BikeSensorManager::hallPulseCount = 0;
-volatile unsigned long BikeSensorManager::lastHallTime = 0;
-volatile float BikeSensorManager::hallFrequency = 0.0;
-volatile bool BikeSensorManager::hallFrequencyReady = false;
-
-// Hall sensor interrupt service routine
-void IRAM_ATTR BikeSensorManager::hallSensorISR() {
-    unsigned long currentTime = micros();
-    
-    if (lastHallTime > 0) {
-        unsigned long pulsePeriod = currentTime - lastHallTime;
-        
-        // Calculate frequency only if period is reasonable (avoid noise)
-        if (pulsePeriod > 1000 && pulsePeriod < 1000000) { // Between 1ms and 1s
-            hallFrequency = 1000000.0 / pulsePeriod; // Convert to Hz
-            hallFrequencyReady = true;
-        }
-    }
-    
-    lastHallTime = currentTime;
-    hallPulseCount++;
-}
-
 BikeSensorManager::BikeSensorManager() : 
     bms1(&Serial2),
     bms2(&Serial1),
@@ -50,11 +26,6 @@ void BikeSensorManager::begin() {
     pinMode(BRAKEL_PIN, OUTPUT);
     pinMode(LEFT_PIN, INPUT_PULLUP);   // INPUT: Read left signal state
     pinMode(RIGHT_PIN, INPUT_PULLUP);  // INPUT: Read right signal state
-    pinMode(HALL_PIN, INPUT_PULLUP);
-    
-    // Setup Hall sensor interrupt
-    attachInterrupt(digitalPinToInterrupt(HALL_PIN), hallSensorISR, RISING);
-    Serial.println("Hall sensor interrupt attached (RISING edge)");
     
     // Initialize BMS communication
     Serial2.begin(115200, SERIAL_8N1, BMS_RX1, BMS_TX1);  // BMS1: RX=5, TX=17
@@ -67,17 +38,15 @@ void BikeSensorManager::begin() {
     Serial.printf("Sensor Manager initialized:\n");
     Serial.printf("- BMS: %s\n", bmsInitialized ? "OK" : "FAILED");
     Serial.printf("- VESC: %s\n", vescInitialized ? "OK" : "FAILED");
-    Serial.printf("- Hall Interrupt: %s\n", "ENABLED");
 }
 
 void BikeSensorManager::update() {
     unsigned long currentTime = millis();
-    
-    if (currentTime - lastSensorUpdate >= 1000) { // Update every 1 second
+
+    if (currentTime - lastSensorUpdate >= 300) {
         updateBMSData();
         updateVESCData();
         updateGPIOSensors();
-        updateHallSensors();
         
         lastSensorUpdate = currentTime;
     }
@@ -93,7 +62,7 @@ bool BikeSensorManager::initializeBMS() {
 
 bool BikeSensorManager::initializeVESC() {
     // Setup SoftwareSerial for VESC on pins 33(RX) and 27(TX)
-    vescSerial.begin(115200);
+    vescSerial.begin(9600);
     
     // Set VESC to use SoftwareSerial
     vesc.setSerialPort(&vescSerial);
@@ -204,13 +173,22 @@ void BikeSensorManager::updateVESCData() {
     if (!vescInitialized) return;
     
     if (vesc.getVescValues()) {
-        bikeStatus.vesc.motorRPM = vesc.data.rpm;
+        bikeStatus.vesc.motorERPM = vesc.data.erpm;
         bikeStatus.vesc.motorCurrent = vesc.data.avgMotorCurrent;
         bikeStatus.vesc.inputVoltage = vesc.data.inpVoltage;
         bikeStatus.vesc.dutyCycle = vesc.data.dutyCycleNow;
         bikeStatus.vesc.tempFET = vesc.data.tempMosfet;
         bikeStatus.vesc.tempMotor = vesc.data.tempMotor;
         bikeStatus.vesc.connected = true;
+        
+        // Calculate bike speed from eRPM (electrical RPM)
+        // eRPM = actual motor RPM * total poles (48 poles for 24 pole pairs)
+        // Formula: eRPM * WHEEL_CIRCUMFERENCE * MOTOR_WHEEL_REDUCTION_RATIO / (60 * MOTOR_TOTAL_POLES) * 3.6
+        // Simplified: eRPM * ERPM_TO_SPEED_FACTOR
+        bikeStatus.bikeSpeed = bikeStatus.vesc.motorERPM * ERPM_TO_SPEED_FACTOR;
+        
+        // Serial.printf("🚀 [VESC] eRPM: %.0f (Speed: %.1f km/h), Motor Current: %.1fA, Input Voltage: %.1fV, Temp FET: %.1f°C, Temp Motor: %.1f°C\n", 
+        //               bikeStatus.vesc.motorERPM, bikeStatus.bikeSpeed, bikeStatus.vesc.motorCurrent, bikeStatus.vesc.inputVoltage, bikeStatus.vesc.tempFET, bikeStatus.vesc.tempMotor);
     } else {
         bikeStatus.vesc.connected = false;
     }
@@ -222,29 +200,6 @@ void BikeSensorManager::updateGPIOSensors() {
     bikeStatus.brakePressed = !digitalRead(BRAKE_PIN);
     bikeStatus.leftSignal = digitalRead(LEFT_PIN);
     bikeStatus.rightSignal = digitalRead(RIGHT_PIN);
-}
-
-void BikeSensorManager::updateHallSensors() {
-    // Get Hall sensor frequency from interrupt
-    noInterrupts(); // Disable interrupts briefly for thread safety
-    
-    if (hallFrequencyReady) {
-        bikeStatus.hallFrequency = hallFrequency;
-        hallFrequencyReady = false; // Mark as read
-        
-        // Calculate bike speed from Hall frequency
-        bikeStatus.bikeSpeed = calculateBikeSpeed(bikeStatus.hallFrequency);
-        
-    } else {
-        // Check if Hall sensor has been inactive (no pulses for >2 seconds)
-        unsigned long currentTime = micros();
-        if (lastHallTime > 0 && (currentTime - lastHallTime) > 2000000) {
-            bikeStatus.hallFrequency = 0.0; // Bike stopped
-            bikeStatus.bikeSpeed = 0.0;     // Speed = 0
-        }
-    }
-    
-    interrupts(); // Re-enable interrupts
 }
 
 BikeStatus BikeSensorManager::getBikeStatus() const {
@@ -275,26 +230,19 @@ void BikeSensorManager::setMotorRPM(int rpm) {
     Serial.printf("Motor RPM set to %d\n", rpm);
 }
 
-unsigned long BikeSensorManager::getHallPulseCount() const {
-    noInterrupts();
-    unsigned long count = hallPulseCount;
-    interrupts();
-    return count;
-}
-
-float BikeSensorManager::calculateBikeSpeed(float hallFreq) const {
-    if (hallFreq <= 0.0) {
-        return 0.0; // Bike stopped
+float BikeSensorManager::calculateSpeedFromMotorRPM(float motorRPM) const {
+    if (motorRPM == 0.0f) {
+        return 0.0f; // Motor stopped
     }
     
-    // Hall frequency = Wheel rotation frequency (assuming 1 magnet per wheel)
-    float wheelRotationsPerSecond = hallFreq / MAGNETS_PER_WHEEL_REVOLUTION;
-    
-    // Distance per second = rotations/s × wheel circumference
-    float metersPerSecond = wheelRotationsPerSecond * WHEEL_CIRCUMFERENCE_M;
-    
-    // Convert m/s to km/h
-    float kmPerHour = metersPerSecond * MS_TO_KMH_FACTOR;
-    
-    return kmPerHour;
+    // Convert eRPM (electrical RPM) to bike speed in km/h
+    // eRPM = actual motor RPM * total poles (48 poles for 24 pole pairs)
+    // Formula derivation:
+    // 1. eRPM → Wheel rotations per second: eRPM / (60 * MOTOR_TOTAL_POLES)
+    // 2. Wheel rotation per second → Distance per second: rotation/sec * WHEEL_CIRCUMFERENCE
+    // 3. Distance per second → km/h: * 3.6
+    // 4. Apply reduction ratio: * MOTOR_WHEEL_REDUCTION_RATIO
+    // 
+    // Combined: motorRPM (as eRPM) * ERPM_TO_SPEED_FACTOR
+    return motorRPM * ERPM_TO_SPEED_FACTOR;
 }

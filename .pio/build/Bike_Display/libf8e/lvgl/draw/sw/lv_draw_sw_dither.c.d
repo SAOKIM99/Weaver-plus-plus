@@ -1,0 +1,30 @@
+.pio/build/Bike_Display/libf8e/lvgl/draw/sw/lv_draw_sw_dither.c.o: \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/lv_draw_sw_dither.c \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/lv_draw_sw_dither.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../core/lv_obj_pos.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../core/../misc/lv_area.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../core/../misc/../lv_conf_internal.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../core/../misc/../lv_conf_kconfig.h \
+ /Users/lekimtinh/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/dio_qspi/include/sdkconfig.h \
+ /Users/lekimtinh/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_common/include/esp_attr.h \
+ lib/BikeDataDisplay/lv_conf.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/lv_draw_sw_gradient.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_color.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/../lv_conf_internal.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_assert.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_log.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_types.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_mem.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_math.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_style.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/../font/lv_font.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/../font/../lv_conf_internal.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/../font/lv_symbol_def.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/../font/../misc/lv_area.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_color.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_area.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_anim.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_txt.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_printf.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_bidi.h \
+ .pio/libdeps/Bike_Display/lvgl/src/draw/sw/../../misc/lv_style_gen.h

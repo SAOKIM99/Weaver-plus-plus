@@ -42,14 +42,19 @@ void JKBMSInterface::clearData() {
 }
 
 void JKBMSInterface::update() {
-    // Send command every 5 seconds
-    if (millis() - _lastCommandSent > 2000) {
+    // Send command every 1 second
+    if (millis() - _lastCommandSent > 1000) {
         requestData();
     }
     
     // Process incoming data
     while (_serial->available()) {
         uint8_t byte = _serial->read();
+        
+        if (_responseIndex >= 512) {
+            _responseIndex = 0; // Prevent buffer overflow
+        }
+        
         _responseBuffer[_responseIndex++] = byte;
         
         // Look for end of frame (checksum pattern)
@@ -60,11 +65,6 @@ void JKBMSInterface::update() {
             
             // Parse the complete frame
             parseRawData(_responseBuffer, _responseIndex);
-            _responseIndex = 0;
-        }
-        
-        // Prevent buffer overflow
-        if (_responseIndex >= 512) {
             _responseIndex = 0;
         }
     }
@@ -143,21 +143,12 @@ void JKBMSInterface::parseRawData(uint8_t* data, int length) {
                 }
                 break;
                 
-            case 0x84: // Current
+            case 0x84: // Current (0x84)
                 if (pos + 1 < length) {
                     uint16_t current = (data[pos] << 8) | data[pos+1]; // Big endian
-                    
-                    if (current == 0) {
-                        _bmsData.current = 0.0f;
-                    } else if (current == 10000) {
-                        _bmsData.current = 0.0f;
-                    } else if (current > 10000) {
-                        _bmsData.current = (current - 10000) * 0.01f; // Discharge (positive)
-                    } else if (current < 10000 && current > 0) {
-                        _bmsData.current = -(10000 - current) * 0.01f; // Charge (negative)  
-                    } else {
-                        _bmsData.current = 0.0f;
-                    }
+                    bool isCharging = (current & 0x8000) != 0;
+                    current &= 0x7FFF; // Clear bit 15
+                    _bmsData.current = isCharging ? (current * 0.01f) : (-current * 0.01f);
                     pos += 2;
                 }
                 break;
@@ -294,7 +285,7 @@ float JKBMSInterface::getLowestCellVoltage() {
     if (!_bmsData.dataValid || _bmsData.numCells == 0) return -1.0f;
     
     float lowest = _bmsData.cellVoltages[0];
-    for (int i = 1; i < _bmsData.numCells; i++) {
+    for (uint8_t i = 1; i < _bmsData.numCells; i++) {
         if (_bmsData.cellVoltages[i] > 0 && _bmsData.cellVoltages[i] < lowest) {
             lowest = _bmsData.cellVoltages[i];
         }
@@ -306,7 +297,7 @@ float JKBMSInterface::getHighestCellVoltage() {
     if (!_bmsData.dataValid || _bmsData.numCells == 0) return -1.0f;
     
     float highest = _bmsData.cellVoltages[0];
-    for (int i = 1; i < _bmsData.numCells; i++) {
+    for (uint8_t i = 1; i < _bmsData.numCells; i++) {
         if (_bmsData.cellVoltages[i] > highest) {
             highest = _bmsData.cellVoltages[i];
         }
@@ -336,11 +327,11 @@ bool JKBMSInterface::isDischargingEnabled() {
 }
 
 bool JKBMSInterface::isCharging() {
-    return _bmsData.dataValid ? _bmsData.current < -0.01f : false;
+    return _bmsData.dataValid && _bmsData.current < -0.01f;
 }
 
 bool JKBMSInterface::isDischarging() {
-    return _bmsData.dataValid ? _bmsData.current > 0.01f : false;
+    return _bmsData.dataValid && _bmsData.current > 0.01f;
 }
 
 String JKBMSInterface::getSoftwareVersion() {
@@ -415,10 +406,10 @@ bool JKBMSInterface::sendMOSCommand(uint8_t dataId, bool enable) {
     uint16_t checksum = calculateChecksum(command, pos);
     
     // Add checksum (4 bytes: 2 bytes CRC16 not used + 2 bytes sum)
-    command[pos++] = 0x00; // CRC16 high (not used)
-    command[pos++] = 0x00; // CRC16 low (not used)
-    command[pos++] = (checksum >> 8) & 0xFF; // Sum high byte
-    command[pos++] = checksum & 0xFF;        // Sum low byte
+    command[pos++] = 0x00;              // CRC16 high (not used)
+    command[pos++] = 0x00;              // CRC16 low (not used)
+    command[pos++] = (checksum >> 8);   // Sum high byte
+    command[pos++] = (uint8_t)checksum; // Sum low byte
     
     // Clear receive buffer before sending command
     while (_serial->available()) {

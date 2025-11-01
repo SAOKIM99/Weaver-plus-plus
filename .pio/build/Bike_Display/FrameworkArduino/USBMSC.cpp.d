@@ -1,0 +1,4 @@
+.pio/build/Bike_Display/FrameworkArduino/USBMSC.cpp.o: \
+ /Users/lekimtinh/.platformio/packages/framework-arduinoespressif32/cores/esp32/USBMSC.cpp \
+ /Users/lekimtinh/.platformio/packages/framework-arduinoespressif32/cores/esp32/USBMSC.h \
+ /Users/lekimtinh/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/dio_qspi/include/sdkconfig.h

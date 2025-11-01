@@ -1,0 +1,12 @@
+.pio/build/Bike_Main/libfe2/NimBLE-Arduino/NimBLEEddystoneURL.cpp.o: \
+ .pio/libdeps/Bike_Main/NimBLE-Arduino/src/NimBLEEddystoneURL.cpp \
+ .pio/libdeps/Bike_Main/NimBLE-Arduino/src/nimconfig.h \
+ /Users/lekimtinh/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/dio_qspi/include/sdkconfig.h \
+ .pio/libdeps/Bike_Main/NimBLE-Arduino/src/nimconfig_rename.h \
+ .pio/libdeps/Bike_Main/NimBLE-Arduino/src/NimBLEEddystoneURL.h \
+ .pio/libdeps/Bike_Main/NimBLE-Arduino/src/NimBLEUUID.h \
+ .pio/libdeps/Bike_Main/NimBLE-Arduino/src/nimble/nimble/host/include/host/ble_uuid.h \
+ .pio/libdeps/Bike_Main/NimBLE-Arduino/src/NimBLELog.h \
+ .pio/libdeps/Bike_Main/NimBLE-Arduino/src/nimble/porting/nimble/include/syscfg/syscfg.h \
+ .pio/libdeps/Bike_Main/NimBLE-Arduino/src/nimble/esp_port/port/include/esp_nimble_cfg.h \
+ .pio/libdeps/Bike_Main/NimBLE-Arduino/src/nimble/console/console.h

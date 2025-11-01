@@ -1,0 +1,9 @@
+bblanchon/ArduinoJson @ ^7.1.0
+Wire
+adafruit/Adafruit BusIO @ ^1.7.5
+miguelbalboa/MFRC522@^1.4.12
+adafruit/Adafruit PN532 @ ^1.2.2
+plerup/EspSoftwareSerial @ ^8.2.0
+h2zero/NimBLE-Arduino @ ^1.4.3
+sandeepmistry/CAN@^0.3.1
+denyssene/SimpleKalmanFilter@^0.1.0

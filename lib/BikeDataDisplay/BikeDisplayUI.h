@@ -188,6 +188,15 @@
 #define BLUETOOTH_ICON_FONT   &lv_font_montserrat_20
 #define BLUETOOTH_ICON_TEXT_ALIGN LV_TEXT_ALIGN_CENTER
 
+// Parking Icon (P indicator - next to Bluetooth)
+#define PARKING_ICON_X        160
+#define PARKING_ICON_Y        7
+#define PARKING_ICON_WIDTH    LV_SIZE_CONTENT
+#define PARKING_ICON_HEIGHT   LV_SIZE_CONTENT
+#define PARKING_ICON_ALIGN    LV_ALIGN_TOP_MID
+#define PARKING_ICON_FONT     &lv_font_montserrat_20
+#define PARKING_ICON_TEXT_ALIGN LV_TEXT_ALIGN_CENTER
+
 // Turn Indicators (Left & Right of Battery %)
 #define TURN_LEFT_ICON_X      -50    // Bên trái battery %
 #define TURN_LEFT_ICON_Y      7      // Cùng height với battery %
@@ -199,6 +208,13 @@
 #define TURN_ICON_FONT        &lv_font_montserrat_20
 #define TURN_ICON_TEXT_ALIGN  LV_TEXT_ALIGN_CENTER
 
+// Passing Indicator
+#define PASSING_LABEL_ALIGN   LV_TEXT_ALIGN_CENTER
+#define PASSING_LABEL_X       130
+#define PASSING_LABEL_Y       7
+#define PASSING_LABEL_FONT    &lv_font_montserrat_20
+#define PASSING_LABEL_TEXT    LV_SYMBOL_EJECT
+
 
 // ================================================
 // BIKE DASHBOARD CLASS
@@ -209,9 +225,10 @@ private:
   lv_obj_t *ui_main_screen;
   lv_obj_t *ui_speed_arc;
   lv_obj_t *ui_speed_label;
+  lv_obj_t *ui_speed_unit_label;    // "Km/h" label
   lv_obj_t *ui_battery_text;
   lv_obj_t *ui_current_text;
-  lv_obj_t *ui_current_label;
+  lv_obj_t *ui_current_label;       // "A" label
   lv_obj_t *ui_current_arc;
   
   // Temperature displays 
@@ -248,9 +265,13 @@ private:
   // Bluetooth icon
   lv_obj_t *ui_bluetooth_icon;
 
+  // Parking icon
+  lv_obj_t *ui_parking_icon;
+
   // Turn indicators
   lv_obj_t *ui_turn_left_icon;
   lv_obj_t *ui_turn_right_icon;
+  lv_obj_t *ui_passing_label;
 
   // Font reference
   const lv_font_t* speed_font;
@@ -263,7 +284,10 @@ private:
   void createMotorDisplay();
   void createOdometer();
   void createBluetoothIcon();
+  void createParkingIcon();
   void createTurnIndicators();
+  void createPassingIndicator();
+  void applyThemeToAllElements();  // Apply theme colors to all UI elements
   lv_color_t getColorByTemperature(int temp, int lowThresh, int highThresh);
   lv_color_t getColorByPercent(int percent, int lowThresh, int highThresh);
 
@@ -277,7 +301,7 @@ public:
   
   // Update methods - individual components
   void updateSpeed(float speed);
-  void updateCurrent(float current);
+  void updateCurrent(float current, bool isCharging);
   void updateBattery(int percent);
   void updateECU(int temperature);
   void updateMotor(int temperature, float current);
@@ -285,13 +309,17 @@ public:
   void updateBattery2(float volt, int percent, uint16_t diffVoltMv, int temp, float current);
   void updateOdometer(float distance);
   void updateBluetooth(bool connected);
+  void updateParking(bool parking);
   void updateTurnIndicators(bool leftActive, bool rightActive);
+  void updatePassing(bool active);
   
   // Update method - all data at once
   void updateAll(const BikeDataDisplay& data);
   
   // Theme and styling
   void setTheme(int themeId);
+  int getCurrentTheme();
+  void flashScreen();
   void setSpeedRange(int maxSpeed);
   void setCurrentRange(int maxCurrent);
   
